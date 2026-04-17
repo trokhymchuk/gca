@@ -1,0 +1,37 @@
+# LLM configuration for integration tests and the llm checker.
+# This file is read by tests/test_llm_integration.py.
+# Copy it and adjust paths / model names to match your setup.
+
+# --- Model source (choose one) -------------------------------------------
+
+# Option A: download from Hugging Face on first run
+repo_id: "Qwen/Qwen2.5-0.5B-Instruct-GGUF"
+filename: "*q4_k_m.gguf"
+
+# Option B: local GGUF file (comment out repo_id/filename above and uncomment)
+# model_path: "/models/qwen2.5-0.5b-instruct-q4_k_m.gguf"
+
+# --- Generation parameters -----------------------------------------------
+
+context_window: 4096
+max_tokens: 60
+stop: ["<|im_end|>"]
+verbose: false
+
+# --- Prompt ------------------------------------------------------------------
+# {commit} is replaced with the subject and/or description of the commit.
+# The model MUST respond with PASS or FAIL as the very first word.
+
+prompt: |
+  <|im_start|>system
+  You are a senior software engineer reviewing git commit messages.
+  Evaluate the commit below and respond with PASS or FAIL as the first
+  word, followed by a one-sentence reason.
+  Criteria for PASS: clear subject, follows conventional-commits format,
+  describes the change and its motivation.
+  Criteria for FAIL: vague, missing context, or does not follow conventions.
+  <|im_end|>
+  <|im_start|>user
+  {commit}
+  <|im_end|>
+  <|im_start|>assistant

@@ -1,0 +1,187 @@
+# ---- Application configuration ----------------------------------------------
+# Optional section. All keys have sensible defaults.
+config:
+  # Exit code returned when one or more commits fail a rule. Default: 1.
+  exit_code_on_failure: 1
+
+  # Print diagnostic info (commits being checked, LLM prompts/responses) to
+  # stderr. Useful during ruleset development. Default: false.
+  debug: false
+
+  # LLM checker configuration (required only when a rule uses type: llm).
+  # Runs inference locally via llama-cpp-python — no external API needed.
+  llm:
+    # Hugging Face repo + GGUF filename glob (used when model_path is absent).
+    repo_id: "Qwen/Qwen2.5-0.5B-Instruct-GGUF"
+    filename: "*q4_k_m.gguf"
+
+    # Alternatively, point at a local file:
+    # model_path: "/models/qwen2.5-0.5b-instruct-q4_k_m.gguf"
+
+    context_window: 4096   # n_ctx passed to llama-cpp
+    max_tokens: 60         # maximum tokens to generate
+    stop: ["<|im_end|>"]   # stop strings that terminate generation
+
+    # Prompt template. {commit} is replaced with the full commit text.
+    # The model MUST respond with PASS or FAIL as the very first word.
+    prompt: |
+      <|im_start|>system
+      You are a senior software engineer reviewing git commit messages.
+      Evaluate the commit below and respond with PASS or FAIL as the first
+      word, followed by a one-sentence reason.
+      Criteria for PASS: clear subject, follows conventional-commits format,
+      describes the change and its motivation.
+      Criteria for FAIL: vague, missing context, or does not follow conventions.
+      <|im_end|>
+      <|im_start|>user
+      {commit}
+      <|im_end|>
+      <|im_start|>assistant
+
+rules:
+  # subject_matches_regex, subject_max_length, subject_min_length
+  # Applied to every commit — enforces conventional commit format and length limits.
+  - name: conventional-commits
+    checkers:
+      - type: subject_matches_regex
+        pattern: "^(feat|fix|chore|docs|style|refactor|test|ci)(\\(.+\\))?: .+"
+      - type: subject_max_length
+        max_length: 72
+      - type: subject_min_length
+        min_length: 10
+
+  # subject_matches_regex with invert: true (checker negation)
+  # No WIP commits may be merged.
+  - name: no-wip-commits
+    checkers:
+      - type: subject_matches_regex
+        pattern: "^WIP:"
+        invert: true
+
+  # is_fixup, is_squash, is_amend (filter: apply rule only to fixup commits)
+  # Fixup commits must reference the original subject after "fixup! ".
+  - name: fixup-must-reference-subject
+    filters:
+      - type: is_fixup
+    checkers:
+      - type: subject_min_length
+        min_length: 10
+
+  # is_merge with invert: true (filter negation — skip merge commits)
+  # All non-merge commits must follow conventional format.
+  - name: conventional-commits-non-merge
+    filters:
+      - type: is_merge
+        invert: true
+    checkers:
+      - type: subject_matches_regex
+        pattern: "^(feat|fix|chore|docs|style|refactor|test|ci)(\\(.+\\))?: .+"
+
+  # is_revert (filter: apply rule only to revert commits)
+  # Revert commits must explain why in the description.
+  - name: revert-must-explain-reason
+    filters:
+      - type: is_revert
+    checkers:
+      - type: description_min_length
+        min_length: 20
+
+  # description_min_length, description_line_max_length
+  # Commits that touch source code must carry a meaningful description.
+  - name: src-changes-need-description
+    filters:
+      - type: directory_modified
+        directories: ["src"]
+    checkers:
+      - type: description_min_length
+        min_length: 20
+      - type: description_line_max_length
+        max_length: 100
+
+  # description_matches_regex
+  # Any commit touching docs must mention the affected section.
+  - name: docs-must-reference-section
+    filters:
+      - type: directory_modified
+        directories: ["docs"]
+    checkers:
+      - type: description_matches_regex
+        pattern: "(?i)section|chapter|page|readme"
+
+  # trailer_present
+  # Every commit must be signed off.
+  - name: require-sign-off
+    checkers:
+      - type: trailer_present
+        token: "Signed-off-by"
+
+  # any_trailer_present
+  # API changes must reference a ticket or issue.
+  - name: api-changes-need-issue-reference
+    filters:
+      - type: directory_modified
+        directories: ["src/api"]
+    checkers:
+      - type: any_trailer_present
+        tokens: ["Fixes", "Closes", "Refs"]
+
+  # only_directories_modified
+  # Migration commits must not touch anything outside migrations/.
+  - name: migrations-must-be-isolated
+    filters:
+      - type: directory_modified
+        directories: ["migrations"]
+    checkers:
+      - type: only_directories_modified
+        directories: ["migrations"]
+
+  # only_files_modified
+  # Lockfile-only commits must not sneak in source changes.
+  - name: lockfile-commits-must-be-isolated
+    filters:
+      - type: file_modified
+        files: ["uv.lock", "package-lock.json"]
+    checkers:
+      - type: only_files_modified
+        files: ["uv.lock", "package-lock.json", "pyproject.toml", "package.json"]
+
+  # file_modified
+  # Every commit that adds a feature must update the changelog.
+  - name: feat-commits-must-update-changelog
+    filters:
+      - type: glob_modified
+        patterns: ["src/**/*.py"]
+    checkers:
+      - type: subject_matches_regex
+        pattern: "^feat"
+        invert: true  # skip non-feat commits
+      - type: file_modified
+        files: ["CHANGELOG.md"]
+
+  # directory_modified
+  # Test files must be updated whenever source files change.
+  - name: src-changes-must-include-tests
+    filters:
+      - type: directory_modified
+        directories: ["src"]
+    checkers:
+      - type: directory_modified
+        directories: ["tests"]
+
+  # llm
+  # Use a local GGUF model to review every non-merge commit.
+  # Requires: pip install 'git-commit-analyzer[llm]'
+  # The config.llm section at the top of this file must be filled in.
+  #
+  # include_subject (default: true)  — feed the subject line to the model.
+  # include_description (default: true) — also feed the description body.
+  # Set include_description: false when commits rarely carry a body and you
+  # only want to enforce subject quality.
+  - name: llm-commit-review
+    filters:
+      - type: is_merge
+        invert: true
+    checkers:
+      - type: llm
+        include_subject: true
+        include_description: true
