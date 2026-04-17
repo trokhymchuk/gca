@@ -1,37 +1,46 @@
-# LLM configuration for integration tests and the llm checker.
-# This file is read by tests/test_llm_integration.py.
-# Copy it and adjust paths / model names to match your setup.
+# Full ruleset config for LLM integration tests.
+# Load with load_ruleset() — has config: and rules: sections.
 
-# --- Model source (choose one) -------------------------------------------
+config:
+  llm:
+    # Option A: download from Hugging Face on first run
+    repo_id: "unsloth/Phi-4-mini-instruct-GGUF"
+    filename: "*Q5_K_M.gguf"
 
-# Option A: download from Hugging Face on first run
-repo_id: "Qwen/Qwen2.5-0.5B-Instruct-GGUF"
-filename: "*q4_k_m.gguf"
+    # Option B: local GGUF file (comment out repo_id/filename above and uncomment)
+    # model_path: "/models/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf"
 
-# Option B: local GGUF file (comment out repo_id/filename above and uncomment)
-# model_path: "/models/qwen2.5-0.5b-instruct-q4_k_m.gguf"
+    context_window: 4096
+    max_tokens: 60
+    stop: ["<|im_end|>"]
+    verbose: false
 
-# --- Generation parameters -----------------------------------------------
+    prompt: |
+      <|im_start|>system
+      You are a senior software engineer reviewing git commit messages.
+      Evaluate the commit below and respond with PASS or FAIL as the very first word,
+      followed by a one-sentence reason.
 
-context_window: 4096
-max_tokens: 60
-stop: ["<|im_end|>"]
-verbose: false
+      PASS if ALL of the following are true:
+        - Subject is specific and explains what changed
+        - Description explains why the change was made
 
-# --- Prompt ------------------------------------------------------------------
-# {commit} is replaced with the subject and/or description of the commit.
-# The model MUST respond with PASS or FAIL as the very first word.
+      FAIL if ANY of the following are true:
+        - No commit prefix (feat/fix/chore/docs/ci/cram/test/etc.)
+        - Subject is vague (e.g. "fix stuff", "update", "changes", "WIP")
+        - Less than 10 meaningful characters in the subject
+      <|im_end|>
+      <|im_start|>user
+      {commit}
+      <|im_end|>
+      <|im_start|>assistant
 
-prompt: |
-  <|im_start|>system
-  You are a senior software engineer reviewing git commit messages.
-  Evaluate the commit below and respond with PASS or FAIL as the first
-  word, followed by a one-sentence reason.
-  Criteria for PASS: clear subject, follows conventional-commits format,
-  describes the change and its motivation.
-  Criteria for FAIL: vague, missing context, or does not follow conventions.
-  <|im_end|>
-  <|im_start|>user
-  {commit}
-  <|im_end|>
-  <|im_start|>assistant
+rules:
+  - name: llm-commit-review
+    filters:
+      - type: is_merge
+        invert: true
+    checkers:
+      - type: llm
+        include_subject: true
+        include_description: true

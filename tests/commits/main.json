@@ -1,0 +1,256 @@
+{
+  "good": [
+    {
+      "subject": "auth: add JWT token refresh with sliding expiration window",
+      "description": "Access tokens now refresh automatically when the remaining TTL drops below\n30 seconds. This prevents mid-session logouts for users on slow connections\nwithout requiring a full re-authentication round-trip."
+    },
+    {
+      "subject": "fix: resolve race condition in concurrent request handler",
+      "description": "Two goroutines could simultaneously write to the response buffer when the\nupstream took longer than the client timeout. Added a mutex guard around\nthe write path and added a regression test that reproduces the original race."
+    },
+    {
+      "subject": "docs: update installation instructions for Python 3.12",
+      "description": "Python 3.11 reached end-of-life. Updated the quickstart section to target\n3.12, removed the outdated virtualenv step, and added the uv-based workflow\nthat matches the project's current tooling."
+    },
+    {
+      "subject": "parser: extract commit parsing logic into dedicated module",
+      "description": "The parser was embedded inside the CLI entrypoint, making it untestable in\nisolation. Moving it to parser.py allows unit tests to cover edge cases\nsuch as empty bodies, binary content, and malformed trailer blocks."
+    },
+    {
+      "subject": "fix: prevent duplicate inserts under high concurrency using advisory locks",
+      "description": "Under load tests we observed duplicate rows when two workers raced on the\nsame idempotency key. Switching to advisory locks in the INSERT path removes\nthe window entirely without adding a separate SELECT before every write."
+    },
+    {
+      "subject": "perf: reduce memory usage by 40% via streaming file reads",
+      "description": "The indexer previously loaded entire files into memory before parsing.\nReplacing the bulk read with a line-by-line generator cuts peak RSS from\n~800 MB to ~480 MB on the largest corpus in the benchmark suite."
+    },
+    {
+      "subject": "cli: add --output-format flag supporting json, csv, and text",
+      "description": "CI pipelines downstream of this tool need machine-readable output.\nAdding --output-format avoids ad-hoc grep parsing of human text and\nmakes the json and csv paths available without a separate formatter script."
+    },
+    {
+      "subject": "fix: correct token expiry calculation for non-UTC timezones",
+      "description": "datetime.now() returned local time while expiry was stored as UTC epoch.\nThe delta was negative for timezones behind UTC, causing every token to\nappear expired immediately. All datetime arithmetic now uses timezone-aware\nobjects anchored to UTC."
+    },
+    {
+      "subject": "chore: bump pyyaml from 6.0.1 to 6.0.2 to address CVE-2024-1234",
+      "description": "CVE-2024-1234 allows arbitrary code execution when loading untrusted YAML\nwith the default Loader. Upgrading to 6.0.2 patches the vulnerability.\nNo API changes required; all existing tests pass."
+    },
+    {
+      "subject": "search: implement full-text search using trigram indexes",
+      "description": "LIKE queries on the notes table caused sequential scans above ~100k rows.\nAdding a GIN trigram index and rewriting the query to use @@ ts_query\nbrings p99 latency from 4.2s down to 38ms on the production dataset."
+    },
+    {
+      "subject": "fix: handle empty commit body without raising IndexError",
+      "description": "git log --format with %b outputs an empty string for commits that have\nno body. The splitter assumed at least one line was always present.\nAdded an early-return guard and a test covering the empty-body case."
+    },
+    {
+      "subject": "cache: add Redis-backed session cache with configurable TTL",
+      "description": "The in-process dict cache did not survive worker restarts and caused\nusers to be logged out on every deploy. Redis persistence keeps sessions\nalive across deploys; TTL is read from SESSION_CACHE_TTL_SECONDS env var."
+    },
+    {
+      "subject": "fix: enforce 50 MB file size limit before writing to disk",
+      "description": "Large uploads were streamed to disk before the size check ran, wasting\nI/O and disk quota. The limit is now enforced by reading Content-Length\nupfront and rejecting the request before any data is written."
+    },
+    {
+      "subject": "perf: add composite index on (user_id, created_at) for timeline",
+      "description": "Timeline queries filter on user_id and sort by created_at. The separate\nsingle-column indexes caused the planner to pick a full sort on a large\nheap fetch. The composite index drops the query from 900ms to under 5ms."
+    },
+    {
+      "subject": "notifications: send weekly email digest of activity summaries",
+      "description": "Users asked for a way to catch up after periods of inactivity without\nlogging in daily. The weekly digest aggregates unread events and sends\na single email every Monday at 08:00 UTC via the existing mailer job."
+    },
+    {
+      "subject": "fix: preserve timezone info when serializing datetime fields",
+      "description": "The JSON serializer called .isoformat() on naive datetimes, dropping\ntimezone context. Downstream consumers silently interpreted times as local\nzone, causing off-by-hours bugs in multi-region deployments."
+    },
+    {
+      "subject": "router: split monolithic router into feature-scoped sub-routers",
+      "description": "The single router.py file grew to 1400 lines with mixed concerns.\nEach feature area (auth, billing, admin) now registers its own APIRouter\nand is included in the main app with a prefix, improving discoverability."
+    },
+    {
+      "subject": "pagination: replace offset-based with cursor-based pagination",
+      "description": "Offset pagination produces inconsistent pages when records are inserted\nor deleted between requests. Cursors based on (created_at, id) are stable\nand also avoid the costly COUNT(*) that blocked on large tables."
+    },
+    {
+      "subject": "fix: retry failed deliveries with exponential backoff",
+      "description": "Failed webhook deliveries were dropped silently. Retries now follow a\n2^n * 100ms schedule up to 5 attempts, after which the delivery is marked\ndead and the operator is notified via the existing alerting channel."
+    },
+    {
+      "subject": "audit: log all admin actions to append-only audit table",
+      "description": "Compliance requires a tamper-evident record of privilege operations.\nAdmin actions now write a signed entry to audit_log before executing.\nThe table uses row-level security so only the audit reader role can SELECT."
+    },
+    {
+      "subject": "refactor: inject dependencies via constructor instead of globals",
+      "description": "Module-level singletons made unit testing require monkeypatching sys.modules.\nConstructor injection makes dependencies explicit, allows fakes in tests,\nand eliminates import-order-dependent initialisation bugs."
+    },
+    {
+      "subject": "rbac: introduce role-based access control for API endpoints",
+      "description": "All endpoints previously shared the same authentication check with no\nauthorisation layer. RBAC adds viewer/editor/admin roles enforced at the\ndecorator level; existing sessions are migrated to the editor role."
+    },
+    {
+      "subject": "fix: prevent overlapping job runs with a distributed lock",
+      "description": "On multi-instance deployments all workers fired the nightly cleanup job\nsimultaneously, causing duplicate side-effects and thundering-herd on the\ndatabase. A Redis SETNX lock ensures only one instance runs the job."
+    },
+    {
+      "subject": "metrics: expose Prometheus counters for request rates and errors",
+      "description": "The SRE team needs per-endpoint error rates to set SLO burn-rate alerts.\nAdded http_requests_total and http_errors_total counters with method,\npath, and status_code labels, scraped at /metrics without auth."
+    },
+    {
+      "subject": "fix: skip blank lines instead of treating them as data rows",
+      "description": "Exported CSVs from Excel include a trailing newline that was parsed as\nan empty data row, causing a validation error on the last line of every\nfile. Added a pre-filter that drops rows where all fields are empty."
+    },
+    {
+      "subject": "graphql: add cursor-based connection type for paginated lists",
+      "description": "The flat list type forced clients to implement their own pagination state.\nThe Relay-compatible Connection type exposes edges, pageInfo, and cursors\nand is backward-compatible because the old list field still resolves."
+    },
+    {
+      "subject": "fix: regenerate session ID after privilege escalation",
+      "description": "Failing to rotate the session ID after privilege escalation leaves the\napplication vulnerable to session fixation (OWASP A07). The session is\nnow invalidated and a new one issued immediately after sudo-mode is granted."
+    },
+    {
+      "subject": "perf: lazy-load images below the fold to improve LCP",
+      "description": "Lighthouse flagged 14 off-screen images being loaded eagerly on the\ndashboard page. Adding loading=lazy to images outside the initial viewport\nreduces total blocking time by 620ms and improves LCP from 4.1s to 1.9s."
+    },
+    {
+      "subject": "workspace: allow users to create and switch between workspaces",
+      "description": "Enterprise accounts requested project isolation without separate logins.\nWorkspaces provide a namespace boundary for resources and settings while\nsharing a single authentication identity across all workspaces."
+    },
+    {
+      "subject": "fix: increase HTTP client read timeout to 30s for slow upstreams",
+      "description": "The report-generation endpoint calls an upstream that can take up to 25s\nunder heavy load. The 10s default timeout caused intermittent 504 errors\non valid requests. Timeout is now configurable per upstream in config.yml."
+    },
+    {
+      "subject": "ci: add matrix build for Python 3.11, 3.12, and 3.13",
+      "description": "The project claims compatibility with all three minor versions but only\n3.11 was tested in CI. Adding a matrix job catches incompatibilities before\nthey reach users, particularly around typing and match-statement syntax."
+    },
+    {
+      "subject": "2fa: add TOTP-based two-factor authentication with recovery codes",
+      "description": "Security audit identified missing MFA as a high-severity finding.\nTOTP follows RFC 6238 with a 30-second window; ten single-use recovery\ncodes are generated at enrollment and stored as bcrypt hashes."
+    },
+    {
+      "subject": "fix: prevent SQL injection in dynamic ORDER BY clause",
+      "description": "The sort parameter was interpolated directly into the query string.\nAn allowlist of valid column names now validates the input before\nit reaches the query builder, and a test covers the injection vector."
+    },
+    {
+      "subject": "batch: process large CSV imports via asynchronous background workers",
+      "description": "Importing files larger than ~5000 rows timed out the HTTP request.\nThe upload now stores the file and enqueues a Celery task; the client\npolls a /jobs/{id}/status endpoint until the import completes."
+    },
+    {
+      "subject": "fix: restrict allowed origins to configured whitelist in production",
+      "description": "The wildcard CORS header was left over from local development and made\nit into production, allowing any origin to make credentialed requests.\nOrigins are now read from ALLOWED_ORIGINS and validated at startup."
+    },
+    {
+      "subject": "perf: replace json.dumps with orjson for 3x throughput gain",
+      "description": "The API serialisation path appeared in every flame graph above 8% CPU.\norjson is a drop-in replacement that uses a Rust backend; benchmarks show\n3.1x throughput improvement with identical output for all tested payloads."
+    },
+    {
+      "subject": "theming: support custom brand colours via CSS custom properties",
+      "description": "White-label customers asked to replace the default blue accent colour.\nCSS custom properties (--color-primary, --color-accent) are now read from\nthe tenant config and injected as a <style> block in the document head."
+    },
+    {
+      "subject": "fix: trim whitespace from email before uniqueness check",
+      "description": "Users copying their email from a document sometimes include a trailing\nspace, causing a duplicate-user error even though the email is unique.\nThe email is now stripped before validation and before storage."
+    },
+    {
+      "subject": "rate-limit: apply per-user limit of 1000 requests per minute",
+      "description": "A handful of API consumers were generating bulk traffic that degraded\nresponse times for all other users. The rate limiter uses a sliding window\ncounter in Redis; over-limit requests receive HTTP 429 with Retry-After."
+    },
+    {
+      "subject": "fix: prevent timing attack via constant-time token comparison",
+      "description": "String equality short-circuits on the first differing byte, leaking\npartial token information through response timing. hmac.compare_digest\nprovides constant-time comparison regardless of where strings diverge."
+    },
+    {
+      "subject": "tasks: replace threading.Timer with APScheduler for recurring jobs",
+      "description": "threading.Timer does not survive exceptions and cannot be inspected or\ncancelled from outside the spawning thread. APScheduler adds a persistent\njob store, structured logging, and graceful shutdown on SIGTERM."
+    },
+    {
+      "subject": "dashboard: add real-time activity feed using Server-Sent Events",
+      "description": "Users refreshed the page repeatedly to see new activity. SSE pushes events\nover a persistent HTTP connection without the overhead of WebSockets.\nThe feed degrades gracefully to polling when EventSource is not available."
+    },
+    {
+      "subject": "fix: forward X-Forwarded-For to preserve client IP in access logs",
+      "description": "Requests routed through the load balancer showed the proxy IP in logs,\nbreaking geo-IP lookups and rate-limit key derivation. The proxy now\nappends the original IP and the app reads it with a trusted-proxy allowlist."
+    },
+    {
+      "subject": "restore: add one-click restore from the most recent 7 daily backups",
+      "description": "Operators previously had to SSH into the backup host and run a manual\nshell script to restore. The new UI lists the last 7 snapshots, shows\nsize and timestamp, and triggers a restore job with a single button click."
+    },
+    {
+      "subject": "fix: fall back to initials when Gravatar returns 404",
+      "description": "Accounts without a Gravatar showed a broken-image icon in the sidebar.\nThe avatar component now renders a coloured circle with the user's initials\nwhen the Gravatar request returns a non-2xx status."
+    },
+    {
+      "subject": "reports: generate monthly PDF summary with activity trend charts",
+      "description": "Finance requested a single-page PDF for board reporting. The generator\nuses WeasyPrint to render the same HTML template as the web view, so\ncharts and tables stay in sync without a separate rendering code path."
+    },
+    {
+      "subject": "fix: detect and reject circular dependencies in plugin loader",
+      "description": "A plugin that imported another plugin caused infinite recursion in the\nloader, crashing the process with a RecursionError. DFS cycle detection\nnow runs before any plugin is initialised and reports the cycle path."
+    },
+    {
+      "subject": "errors: unify error response shape across all API handlers",
+      "description": "Clients had to handle three different error JSON structures depending\non which handler raised the exception. A single ErrorResponse dataclass\nis now serialised by a global exception handler for all error types."
+    },
+    {
+      "subject": "docs: add Kubernetes manifests and Helm chart usage guide",
+      "description": "The deployment docs only covered Docker Compose. Added manifests for\nDeployment, Service, and HPA resources plus a Helm values reference\nso teams can deploy to existing clusters without custom scripting."
+    },
+    {
+      "subject": "onboarding: add interactive tutorial for first-time users",
+      "description": "Activation rate for new signups dropped below the 60% threshold.\nA five-step guided tour highlights the three core actions and surfaces\ncontextual help tooltips; users who complete it activate at 84%."
+    }
+  ],
+  "bad": [
+    {"subject": "fix stuff", "description": ""},
+    {"subject": "update", "description": ""},
+    {"subject": "changes", "description": "fixed some things"},
+    {"subject": "WIP", "description": ""},
+    {"subject": "misc", "description": "various"},
+    {"subject": "done", "description": "its done"},
+    {"subject": "ok", "description": ""},
+    {"subject": "patch", "description": "patch"},
+    {"subject": "cleanup", "description": "cleaned up"},
+    {"subject": "temp", "description": "temporary"},
+    {"subject": "quick fix", "description": ""},
+    {"subject": "small change", "description": "changed a thing"},
+    {"subject": "more changes", "description": "even more"},
+    {"subject": "minor update", "description": ""},
+    {"subject": "some work", "description": "did some work"},
+    {"subject": "stuff", "description": "more stuff"},
+    {"subject": "work in progress", "description": "not done yet"},
+    {"subject": "fix", "description": ""},
+    {"subject": "add", "description": "added it"},
+    {"subject": "remove", "description": ""},
+    {"subject": "update file", "description": "updated the file"},
+    {"subject": "fix bug", "description": "fixed the bug"},
+    {"subject": "add feature", "description": ""},
+    {"subject": "refactor code", "description": "refactored"},
+    {"subject": "update tests", "description": "updated"},
+    {"subject": "whoops", "description": "forgot to add this"},
+    {"subject": "oops", "description": ""},
+    {"subject": "typo", "description": "fixed typo"},
+    {"subject": "lol", "description": "idk"},
+    {"subject": "wip wip wip", "description": ""},
+    {"subject": "fixup", "description": "fixup commit"},
+    {"subject": "1", "description": ""},
+    {"subject": "final", "description": "final version"},
+    {"subject": "final_final", "description": ""},
+    {"subject": "real final", "description": "for real this time"},
+    {"subject": "please work", "description": ""},
+    {"subject": "idk", "description": "no idea what happened"},
+    {"subject": "debug", "description": "added some prints"},
+    {"subject": "hack", "description": "dirty hack"},
+    {"subject": "hotfix", "description": ""},
+    {"subject": "urgent", "description": "URGENT FIX"},
+    {"subject": "breaking", "description": "broke some stuff"},
+    {"subject": "no idea", "description": ""},
+    {"subject": "try again", "description": "another attempt"},
+    {"subject": "yolo", "description": ""},
+    {"subject": "commit", "description": "saving progress"},
+    {"subject": "checkpoint", "description": ""},
+    {"subject": "bump", "description": "bumped version"},
+    {"subject": "tweak", "description": "small tweak"},
+    {"subject": "nit", "description": ""}
+  ]
+}

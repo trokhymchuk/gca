@@ -26,10 +26,24 @@ _GIT_RECORD_SEP = "%x01"
 # %(trailers:only,separator=...) emits only lines git recognises as trailers,
 # respecting gitconfig trailer settings (custom separators, key aliases, etc.).
 # %b is kept for the raw body; description is derived by stripping the trailer block.
-_FORMAT = _GIT_FIELD_SEP.join([
-    "%H", "%ae", "%an", "%aI", "%ce", "%cn", "%cI", "%s", "%b", "%P",
-    f"%(trailers:only,separator={_GIT_TRAILER_SEP})",
-]) + _GIT_RECORD_SEP
+_FORMAT = (
+    _GIT_FIELD_SEP.join(
+        [
+            "%H",
+            "%ae",
+            "%an",
+            "%aI",
+            "%ce",
+            "%cn",
+            "%cI",
+            "%s",
+            "%b",
+            "%P",
+            f"%(trailers:only,separator={_GIT_TRAILER_SEP})",
+        ]
+    )
+    + _GIT_RECORD_SEP
+)
 
 
 def _parse_trailers(raw: str) -> list[Trailer]:
@@ -89,7 +103,19 @@ def _parse_record(record: str, changed_files: dict[str, list[str]]) -> GitCommit
     if len(fields) < 11:
         return None
 
-    sha, author_email, author_name, author_date_str, committer_email, committer_name, committer_date_str, subject, body, parents_str, raw_trailers = fields
+    (
+        sha,
+        author_email,
+        author_name,
+        author_date_str,
+        committer_email,
+        committer_name,
+        committer_date_str,
+        subject,
+        body,
+        parents_str,
+        raw_trailers,
+    ) = fields
 
     sha = sha.strip()
     if not sha:
@@ -131,7 +157,9 @@ def _get_changed_files(repo_path: Path, revision_range: str) -> dict[str, list[s
     Returns:
         Dict mapping full SHA strings to lists of changed file paths.
     """
-    raw = _run_git(["log", "--name-only", "--format=format:SHA:%H", revision_range], cwd=repo_path)
+    raw = _run_git(
+        ["log", "--name-only", "--format=format:SHA:%H", revision_range], cwd=repo_path
+    )
 
     files_by_sha: dict[str, list[str]] = {}
     current_sha: str | None = None

@@ -1,5 +1,5 @@
 [project]
-name = "git-commit-analyzer"
+name = "gca"
 version = "0.1.0"
 description = "Git commit analyzer for CI pipelines"
 requires-python = ">=3.11"
@@ -9,10 +9,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-llm = ["llama-cpp-python>=0.3"]
+llm = ["llama-cpp-python>=0.3", "huggingface-hub>=0.23"]
 
 [project.scripts]
-git-commit-analyzer = "git_commit_analyzer.cli:main"
+gca = "git_commit_analyzer.cli:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -25,4 +25,10 @@ packages = ["src/git_commit_analyzer"]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
+    "ruff>=0.15.11",
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: tests that require llama-cpp-python and llm-config.yml (deselect with -m 'not integration')",
 ]

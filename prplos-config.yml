@@ -8,36 +8,6 @@ config:
   # stderr. Useful during ruleset development. Default: false.
   debug: false
 
-  # LLM checker configuration (required only when a rule uses type: llm).
-  # Runs inference locally via llama-cpp-python — no external API needed.
-  llm:
-    # Hugging Face repo + GGUF filename glob (used when model_path is absent).
-    repo_id: "Qwen/Qwen2.5-0.5B-Instruct-GGUF"
-    filename: "*q4_k_m.gguf"
-
-    # Alternatively, point at a local file:
-    # model_path: "/models/qwen2.5-0.5b-instruct-q4_k_m.gguf"
-
-    context_window: 4096   # n_ctx passed to llama-cpp
-    max_tokens: 60         # maximum tokens to generate
-    stop: ["<|im_end|>"]   # stop strings that terminate generation
-
-    # Prompt template. {commit} is replaced with the full commit text.
-    # The model MUST respond with PASS or FAIL as the very first word.
-    prompt: |
-      <|im_start|>system
-      You are a senior software engineer reviewing git commit messages.
-      Evaluate the commit below and respond with PASS or FAIL as the first
-      word, followed by a one-sentence reason.
-      Criteria for PASS: clear subject, follows conventional-commits format,
-      describes the change and its motivation.
-      Criteria for FAIL: vague, missing context, or does not follow conventions.
-      <|im_end|>
-      <|im_start|>user
-      {commit}
-      <|im_end|>
-      <|im_start|>assistant
-
 rules:
   # every non-fixup commit must have a description at least 80 chars
   - name: description-is-present
@@ -66,15 +36,6 @@ rules:
       - type: any_trailer_present
         tokens: ["Fixes", "Closes", "References"]
 
-  - name: llm-check-passes
-    filters:
-      - type: is_fixup
-        invert: true
-    checkers:
-      - type: llm
-        include_subject: true
-        include_description: true
-
   # every commit must have a signed-off-by trailer
   - name: require-sign-off
     checkers:
@@ -100,10 +61,10 @@ rules:
   - name: gitlab-ci-modified
     filters:
       - type: file_modified
-        directories: [".gitlab-ci.yml"]
+        files: [".gitlab-ci.yml"]
     checkers:
       - type: file_modified
-        directories: [".gitlab-ci.yml"]
+        files: [".gitlab-ci.yml"]
       - type: subject_matches_regex
         pattern: "^ci:.+$"
 
@@ -133,3 +94,12 @@ rules:
       - type: subject_matches_regex
         pattern: "^ci: cram:.+$"
 
+# rules:
+#   - name: llm-commit-review
+#     filters:
+#       - type: is_merge
+#         invert: true
+#     checkers:
+#       - type: llm
+#         include_subject: true
+#         include_description: true

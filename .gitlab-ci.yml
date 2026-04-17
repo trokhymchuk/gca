@@ -1,0 +1,35 @@
+stages:
+  - analyze
+
+.analyze-base:
+  stage: analyze
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  variables:
+    GIT_DEPTH: 0
+
+analyze:static:
+  extends: .analyze-base
+  image:
+    name: trokhymchuk/gca-static:latest
+    pull_policy: always
+  script:
+    - gca --color analyze . --base-ref $CI_MERGE_REQUEST_DIFF_BASE_SHA --config rules.yml
+
+analyze:llm:
+  extends: .analyze-base
+  image:
+    name: trokhymchuk/gca-llm:latest
+    pull_policy: always
+  when: manual
+  variables:
+    HF_HOME: .cache/huggingface
+  cache:
+    key:
+      files:
+        - llm-config.yml
+    paths:
+      - .cache/huggingface
+  script:
+    - gca download-model --config /app/llm-config.yml
+    - gca --color analyze . --base-ref $CI_MERGE_REQUEST_DIFF_BASE_SHA --config /app/llm-config.yml

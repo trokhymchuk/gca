@@ -12,10 +12,10 @@ class LlmConfig:
 
     Attributes:
         prompt: Prompt template sent to the model.  The placeholder ``{commit}``
-            is replaced with the string representation of the commit being checked.
-            The model is expected to reply with ``PASS`` or ``FAIL`` as the very
-            first word, optionally followed by an explanation on the same line.
-        repo_id: Hugging Face repository ID, e.g. ``"Qwen/Qwen2.5-0.5B-Instruct-GGUF"``.
+            is replaced with the subject and/or description of the commit.
+            The model must reply with ``PASS`` or ``FAIL`` as the very first word,
+            optionally followed by a one-sentence explanation.
+        repo_id: Hugging Face repository ID, e.g. ``"Qwen/Qwen2.5-3B-Instruct-GGUF"``.
             Mutually exclusive with :attr:`model_path`.
         filename: GGUF filename or glob pattern within the HF repo,
             e.g. ``"*q4_k_m.gguf"``.  Used together with :attr:`repo_id`.

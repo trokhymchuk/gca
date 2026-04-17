@@ -30,19 +30,20 @@ attribute of a registered :class:`~git_commit_analyzer.filters.CommitFilter`
 or :class:`~git_commit_analyzer.checkers.CommitChecker` subclass.
 """
 
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
 
-from .checkers import CheckResult, CommitChecker, NegatedChecker
+from .checkers import CommitChecker, NegatedChecker
 from .config import AppConfig, LlmConfig
 from .filters import CommitFilter, NegatedFilter
 from .models import GitCommit
 
 
 @dataclass
-class RulesetFile:
+class ConfigFile:
     """The fully parsed contents of a YAML ruleset file.
 
     Attributes:
@@ -145,12 +146,21 @@ class Ruleset:
             ``False``, in the order they were encountered (commit order ×
             rule order).
         """
-        return [
-            result
-            for commit in commits
-            for rule in self.rules
-            if (result := rule.check(commit)) is not None and not result.passed
-        ]
+        return list(self.iter_check_commits(commits))
+
+    def iter_check_commits(
+        self, commits: list[GitCommit]
+    ) -> Iterator[CommitRuleResult]:
+        """Yield failing :class:`CommitRuleResult` objects one at a time as they occur.
+
+        Identical to :meth:`check_commits` but streams results instead of
+        collecting them, allowing the caller to act on each failure immediately.
+        """
+        for commit in commits:
+            for rule in self.rules:
+                result = rule.check(commit)
+                if result is not None and not result.passed:
+                    yield result
 
 
 def _build_filter(spec: dict) -> CommitFilter:
@@ -263,8 +273,47 @@ def _build_config(config_data: dict) -> AppConfig:
     )
 
 
-def load_ruleset(path: Path) -> RulesetFile:
-    """Parse a YAML ruleset file and return a :class:`RulesetFile`.
+def _merge_configs(configs: list[AppConfig]) -> AppConfig:
+    """Merge multiple :class:`AppConfig` instances — last value wins for each field,
+    except ``debug`` where any ``True`` wins."""
+    if not configs:
+        return AppConfig()
+    result = configs[0]
+    for cfg in configs[1:]:
+        result = AppConfig(
+            exit_code_on_failure=cfg.exit_code_on_failure,
+            debug=result.debug or cfg.debug,
+            llm=cfg.llm if cfg.llm is not None else result.llm,
+        )
+    return result
+
+
+def load_configs(paths: list[Path]) -> ConfigFile:
+    """Load and merge multiple YAML ruleset files into a single :class:`ConfigFile`.
+
+    Rules are concatenated in the order the files are given.  Config sections
+    are merged with last-file-wins semantics (except ``debug``, which is ``True``
+    if any file enables it).
+
+    Args:
+        paths: Ordered list of YAML ruleset file paths.  Must not be empty.
+
+    Returns:
+        A :class:`ConfigFile` containing the merged :class:`Ruleset` and config.
+
+    Raises:
+        ValueError: If ``paths`` is empty, or if any file contains an error.
+    """
+    if not paths:
+        raise ValueError("load_configs requires at least one path")
+    loaded = [load_config(p) for p in paths]
+    all_rules = [rule for rf in loaded for rule in rf.ruleset.rules]
+    config = _merge_configs([rf.config for rf in loaded])
+    return ConfigFile(ruleset=Ruleset(rules=all_rules), config=config)
+
+
+def load_config(path: Path) -> ConfigFile:
+    """Parse a YAML ruleset file and return a :class:`ConfigFile`.
 
     The YAML file may contain an optional top-level ``config:`` section (see
     :class:`~git_commit_analyzer.config.AppConfig`) in addition to the
@@ -275,7 +324,7 @@ def load_ruleset(path: Path) -> RulesetFile:
             ``rules`` list; an absent or empty list produces an empty ruleset.
 
     Returns:
-        A :class:`RulesetFile` containing the parsed :class:`Ruleset` and
+        A :class:`ConfigFile` containing the parsed :class:`Ruleset` and
         :class:`~git_commit_analyzer.config.AppConfig`.
 
     Raises:
@@ -291,13 +340,15 @@ def load_ruleset(path: Path) -> RulesetFile:
 
     rules = []
     for rule_data in data.get("rules", []):
-        rules.append(Rule(
-            name=rule_data["name"],
-            filters=[_build_filter(spec) for spec in rule_data.get("filters", [])],
-            checkers=[
-                _build_checker(spec, llm_config=config.llm, debug=config.debug)
-                for spec in rule_data.get("checkers", [])
-            ],
-        ))
+        rules.append(
+            Rule(
+                name=rule_data["name"],
+                filters=[_build_filter(spec) for spec in rule_data.get("filters", [])],
+                checkers=[
+                    _build_checker(spec, llm_config=config.llm, debug=config.debug)
+                    for spec in rule_data.get("checkers", [])
+                ],
+            )
+        )
 
-    return RulesetFile(ruleset=Ruleset(rules=rules), config=config)
+    return ConfigFile(ruleset=Ruleset(rules=rules), config=config)

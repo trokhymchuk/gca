@@ -27,5 +27,5 @@ COPY --from=builder /app/.venv /app/.venv
 
 ENV PATH="/app/.venv/bin:$PATH"
 
-ENTRYPOINT ["git-commit-analyzer"]
+ENTRYPOINT ["gca"]
 

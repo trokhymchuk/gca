@@ -1,0 +1,13 @@
+{
+  "good": [
+    {
+      "subject": "ci: add git-commit-analyzer to the commit-check stage of the gitlab-ci.yml to check correctness of the commits",
+      "description": "Currently to analyze commits you need to manually\nExamine each of them. That is not convenient and requires\nlots of time. git-commit-analyzer tries to automate it.\nThis commit adds git commit analyzer in the gitlab-ci.yml:\n- new stage 'commit-check' is added\n- the gca.yml is included"
+    },
+    {
+      "subject": "ci: add new gca.yml (git-commit-analyzer) checker to check git commits in the GitLab CI",
+      "description": "Enable git-commit-analyzer to check commit messages:\n- static analyzer is enabled after every push on merge reuqests\n- llm analyzer needs manual action to start"
+    }
+  ],
+  "bad": []
+}

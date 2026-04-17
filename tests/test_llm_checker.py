@@ -3,14 +3,15 @@
 llama-cpp-python is an optional dependency, so _load_llama is patched in every
 test — the real inference library is never required.
 """
+
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from git_commit_analyzer import GitCommit, LlmChecker, load_ruleset
-from git_commit_analyzer.config import AppConfig, LlmConfig
+from git_commit_analyzer import GitCommit, LlmChecker, load_config
+from git_commit_analyzer.config import LlmConfig
 
 _NOW = datetime(2024, 1, 1, tzinfo=timezone.utc)
 
@@ -438,41 +439,54 @@ assert len(BAD_COMMITS) == 50, f"Expected 50 bad commits, got {len(BAD_COMMITS)}
 # Parametrized tests
 # ---------------------------------------------------------------------------
 
+
 class TestLlmCheckerWithGoodCommits:
     @pytest.mark.parametrize("subject,description", GOOD_COMMITS)
-    def test_passes_when_llm_approves(self, subject: str, description: str):
+    def test_passes_when_llm_returns_pass(self, subject: str, description: str):
         checker = LlmChecker(config=make_config())
         mock_llm = make_mock_llm("PASS well-structured commit message")
-        with patch("git_commit_analyzer.checkers._load_llama", return_value=mock_llm):
+        with patch(
+            "git_commit_analyzer.checkers.llm._load_llama", return_value=mock_llm
+        ):
             result = checker(make_commit_with_description(subject, description))
-        assert result.passed is True, f"Expected PASS for: {subject!r}"
+        assert result.passed is True, f"Expected pass for: {subject!r}"
+        assert "PASS" in result.message
 
     @pytest.mark.parametrize("subject,description", GOOD_COMMITS)
-    def test_prompt_contains_subject_and_description(self, subject: str, description: str):
+    def test_prompt_contains_subject_and_description(
+        self, subject: str, description: str
+    ):
         checker = LlmChecker(config=make_config(prompt="Evaluate: {commit}"))
         captured: list[str] = []
 
         def fake_llm(prompt, **kwargs):
             captured.append(prompt)
-            return {"choices": [{"text": "PASS ok"}]}
+            return {"choices": [{"text": "PASS looks good"}]}
 
-        with patch("git_commit_analyzer.checkers._load_llama", return_value=MagicMock(side_effect=fake_llm)):
+        with patch(
+            "git_commit_analyzer.checkers.llm._load_llama",
+            return_value=MagicMock(side_effect=fake_llm),
+        ):
             checker(make_commit_with_description(subject, description))
 
         assert subject in captured[0], f"Subject missing from prompt for: {subject!r}"
         if description.strip():
-            assert description.strip() in captured[0], f"Description missing from prompt for: {subject!r}"
+            assert description.strip() in captured[0], (
+                f"Description missing from prompt for: {subject!r}"
+            )
 
 
 class TestLlmCheckerWithBadCommits:
     @pytest.mark.parametrize("subject,description", BAD_COMMITS)
-    def test_fails_when_llm_rejects(self, subject: str, description: str):
+    def test_fails_when_llm_returns_fail(self, subject: str, description: str):
         checker = LlmChecker(config=make_config())
-        mock_llm = make_mock_llm("FAIL commit message is too vague")
-        with patch("git_commit_analyzer.checkers._load_llama", return_value=mock_llm):
+        mock_llm = make_mock_llm("FAIL too vague and missing context")
+        with patch(
+            "git_commit_analyzer.checkers.llm._load_llama", return_value=mock_llm
+        ):
             result = checker(make_commit_with_description(subject, description))
-        assert result.passed is False, f"Expected FAIL for: {subject!r}"
-        assert "vague" in result.message
+        assert result.passed is False, f"Expected fail for: {subject!r}"
+        assert "FAIL" in result.message
 
     @pytest.mark.parametrize("subject,description", BAD_COMMITS)
     def test_prompt_contains_subject(self, subject: str, description: str):
@@ -483,7 +497,10 @@ class TestLlmCheckerWithBadCommits:
             captured.append(prompt)
             return {"choices": [{"text": "FAIL too vague"}]}
 
-        with patch("git_commit_analyzer.checkers._load_llama", return_value=MagicMock(side_effect=fake_llm)):
+        with patch(
+            "git_commit_analyzer.checkers.llm._load_llama",
+            return_value=MagicMock(side_effect=fake_llm),
+        ):
             checker(make_commit_with_description(subject, description))
 
         assert subject in captured[0], f"Subject missing from prompt for: {subject!r}"
@@ -493,29 +510,53 @@ class TestLlmCheckerWithBadCommits:
 # LlmChecker — response parsing
 # ---------------------------------------------------------------------------
 
+
 class TestLlmCheckerResponseParsing:
     def _run(self, response_text: str):
         checker = LlmChecker(config=make_config())
-        with patch("git_commit_analyzer.checkers._load_llama", return_value=make_mock_llm(response_text)):
+        with patch(
+            "git_commit_analyzer.checkers.llm._load_llama",
+            return_value=make_mock_llm(response_text),
+        ):
             return checker(make_commit())
 
-    def test_pass_response_returns_passing_result(self):
-        result = self._run("PASS commit looks good")
+    def test_pass_response_passes(self):
+        result = self._run("PASS well-structured commit")
         assert result.passed is True
-        assert "commit looks good" in result.message
+        assert "PASS" in result.message
 
-    def test_fail_response_returns_failing_result(self):
-        result = self._run("FAIL subject is too vague")
+    def test_fail_response_fails(self):
+        result = self._run("FAIL vague subject")
         assert result.passed is False
+        assert "FAIL" in result.message
+
+    def test_pass_lowercase_passes(self):
+        assert self._run("pass looks good").passed is True
+
+    def test_fail_mixed_case_fails(self):
+        assert self._run("Fail not conventional").passed is False
+
+    def test_pass_with_colon_suffix(self):
+        assert self._run("PASS: well-structured").passed is True
+
+    def test_fail_with_colon_suffix(self):
+        assert self._run("FAIL: too vague").passed is False
+
+    def test_reason_included_in_message(self):
+        result = self._run("PASS excellent use of conventional commits")
+        assert "excellent use of conventional commits" in result.message
+
+    def test_fail_reason_included_in_message(self):
+        result = self._run("FAIL subject is too vague")
         assert "subject is too vague" in result.message
 
-    def test_pass_lowercase_treated_as_pass(self):
-        assert self._run("pass everything ok").passed is True
+    def test_pass_alone_passes(self):
+        assert self._run("PASS").passed is True
 
-    def test_fail_mixed_case(self):
-        assert self._run("Fail bad message").passed is False
+    def test_fail_alone_fails(self):
+        assert self._run("FAIL").passed is False
 
-    def test_ambiguous_response_fails(self):
+    def test_non_pass_fail_response_fails(self):
         result = self._run("I think this is fine")
         assert result.passed is False
         assert "ambiguous" in result.message
@@ -523,29 +564,34 @@ class TestLlmCheckerResponseParsing:
     def test_empty_response_fails(self):
         assert self._run("").passed is False
 
-    def test_pass_with_no_explanation(self):
-        assert self._run("PASS").passed is True
-
-    def test_fail_with_no_explanation(self):
-        assert self._run("FAIL").passed is False
+    def test_numeric_response_fails(self):
+        result = self._run("85 looks good")
+        assert result.passed is False
+        assert "ambiguous" in result.message
 
 
 # ---------------------------------------------------------------------------
 # LlmChecker — model loading
 # ---------------------------------------------------------------------------
 
+
 class TestLlmCheckerModelLoading:
     def test_llm_loaded_once_across_multiple_calls(self):
         checker = LlmChecker(config=make_config())
         mock_llm = make_mock_llm("PASS ok")
-        with patch("git_commit_analyzer.checkers._load_llama", return_value=mock_llm) as mock_load:
+        with patch(
+            "git_commit_analyzer.checkers.llm._load_llama", return_value=mock_llm
+        ) as mock_load:
             checker(make_commit())
             checker(make_commit())
         mock_load.assert_called_once()
 
     def test_load_error_becomes_failing_result(self):
         checker = LlmChecker(config=make_config())
-        with patch("git_commit_analyzer.checkers._load_llama", side_effect=ImportError("not installed")):
+        with patch(
+            "git_commit_analyzer.checkers.llm._load_llama",
+            side_effect=ImportError("not installed"),
+        ):
             result = checker(make_commit())
         assert result.passed is False
         assert "not installed" in result.message
@@ -559,7 +605,9 @@ class TestLlmCheckerModelLoading:
         )
         checker = LlmChecker(config=config)
         mock_llm = make_mock_llm("PASS")
-        with patch("git_commit_analyzer.checkers._load_llama", return_value=mock_llm):
+        with patch(
+            "git_commit_analyzer.checkers.llm._load_llama", return_value=mock_llm
+        ):
             checker(make_commit())
         _, kwargs = mock_llm.call_args
         assert kwargs.get("stop") == ["<|im_end|>"]
@@ -571,6 +619,7 @@ class TestLlmCheckerModelLoading:
 # ---------------------------------------------------------------------------
 # LlmChecker — include_subject / include_description flags
 # ---------------------------------------------------------------------------
+
 
 def make_commit_with_description(subject: str, description: str) -> GitCommit:
     return GitCommit(
@@ -598,7 +647,10 @@ class TestCommitTextSelection:
             captured.append(prompt)
             return {"choices": [{"text": "PASS ok"}]}
 
-        with patch("git_commit_analyzer.checkers._load_llama", return_value=MagicMock(side_effect=fake_llm)):
+        with patch(
+            "git_commit_analyzer.checkers.llm._load_llama",
+            return_value=MagicMock(side_effect=fake_llm),
+        ):
             checker(commit)
         return captured[0]
 
@@ -615,21 +667,27 @@ class TestCommitTextSelection:
         assert "Some description" in prompt
 
     def test_subject_only_excludes_description(self):
-        checker = LlmChecker(config=make_config(prompt="{commit}"), include_description=False)
+        checker = LlmChecker(
+            config=make_config(prompt="{commit}"), include_description=False
+        )
         commit = make_commit_with_description("feat: my feature", "Some description")
         prompt = self._capture_prompt(checker, commit)
         assert "feat: my feature" in prompt
         assert "Some description" not in prompt
 
     def test_description_only_excludes_subject(self):
-        checker = LlmChecker(config=make_config(prompt="{commit}"), include_subject=False)
+        checker = LlmChecker(
+            config=make_config(prompt="{commit}"), include_subject=False
+        )
         commit = make_commit_with_description("feat: my feature", "Some description")
         prompt = self._capture_prompt(checker, commit)
         assert "feat: my feature" not in prompt
         assert "Some description" in prompt
 
     def test_empty_description_not_appended(self):
-        checker = LlmChecker(config=make_config(prompt="{commit}"), include_description=True)
+        checker = LlmChecker(
+            config=make_config(prompt="{commit}"), include_description=True
+        )
         commit = make_commit_with_description("feat: my feature", "")
         prompt = self._capture_prompt(checker, commit)
         assert prompt.strip().endswith("feat: my feature")
@@ -665,7 +723,7 @@ rules:
         include_subject: true
         include_description: false
 """)
-        rf = load_ruleset(yaml_file)
+        rf = load_config(yaml_file)
         checker = rf.ruleset.rules[0].checkers[0]
         assert isinstance(checker, LlmChecker)
         assert checker.include_subject is True
@@ -684,21 +742,22 @@ rules:
     checkers:
       - type: llm
 """)
-        rf = load_ruleset(yaml_file)
+        rf = load_config(yaml_file)
         checker = rf.ruleset.rules[0].checkers[0]
         assert checker.include_subject is True
         assert checker.include_description is True
 
 
 # ---------------------------------------------------------------------------
-# _build_config / load_ruleset — config section parsing
+# _build_config / load_config — config section parsing
 # ---------------------------------------------------------------------------
+
 
 class TestBuildConfig:
     def test_defaults_when_config_absent(self, tmp_path: Path):
         yaml_file = tmp_path / "rules.yml"
         yaml_file.write_text("rules: []\n")
-        rf = load_ruleset(yaml_file)
+        rf = load_config(yaml_file)
         assert rf.config.exit_code_on_failure == 1
         assert rf.config.debug is False
         assert rf.config.llm is None
@@ -706,12 +765,12 @@ class TestBuildConfig:
     def test_exit_code_parsed(self, tmp_path: Path):
         yaml_file = tmp_path / "rules.yml"
         yaml_file.write_text("config:\n  exit_code_on_failure: 2\nrules: []\n")
-        assert load_ruleset(yaml_file).config.exit_code_on_failure == 2
+        assert load_config(yaml_file).config.exit_code_on_failure == 2
 
     def test_debug_flag_parsed(self, tmp_path: Path):
         yaml_file = tmp_path / "rules.yml"
         yaml_file.write_text("config:\n  debug: true\nrules: []\n")
-        assert load_ruleset(yaml_file).config.debug is True
+        assert load_config(yaml_file).config.debug is True
 
     def test_llm_config_parsed(self, tmp_path: Path):
         yaml_file = tmp_path / "rules.yml"
@@ -726,7 +785,7 @@ config:
     prompt: "Review: {commit}"
 rules: []
 """)
-        llm = load_ruleset(yaml_file).config.llm
+        llm = load_config(yaml_file).config.llm
         assert llm is not None
         assert llm.repo_id == "Qwen/Qwen2.5-0.5B-Instruct-GGUF"
         assert llm.filename == "*q4_k_m.gguf"
@@ -736,9 +795,11 @@ rules: []
 
     def test_llm_checker_in_rule_requires_llm_config(self, tmp_path: Path):
         yaml_file = tmp_path / "rules.yml"
-        yaml_file.write_text("rules:\n  - name: llm-review\n    checkers:\n      - type: llm\n")
+        yaml_file.write_text(
+            "rules:\n  - name: llm-review\n    checkers:\n      - type: llm\n"
+        )
         with pytest.raises(ValueError, match="config.llm"):
-            load_ruleset(yaml_file)
+            load_config(yaml_file)
 
     def test_llm_checker_instantiated_from_yaml(self, tmp_path: Path):
         yaml_file = tmp_path / "rules.yml"
@@ -753,7 +814,7 @@ rules:
     checkers:
       - type: llm
 """)
-        rf = load_ruleset(yaml_file)
+        rf = load_config(yaml_file)
         checker = rf.ruleset.rules[0].checkers[0]
         assert isinstance(checker, LlmChecker)
         assert checker.config.repo_id == "Qwen/Qwen2.5-0.5B-Instruct-GGUF"

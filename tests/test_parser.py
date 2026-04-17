@@ -4,7 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from git_commit_analyzer.parser import _parse_trailers, _strip_trailer_block, get_commits
+from git_commit_analyzer.parser import (
+    _parse_trailers,
+    _strip_trailer_block,
+    get_commits,
+)
 
 _TRAILER_SEP = "\x02"
 
@@ -24,15 +28,19 @@ def test_strip_trailer_block_with_trailers():
         Reviewed-by: Alice <alice@example.com>
         Co-authored-by: Bob <bob@example.com>
     """)
-    assert _strip_trailer_block(body) == "Fix the bug in the parser.\n\nMore details here."
+    assert (
+        _strip_trailer_block(body) == "Fix the bug in the parser.\n\nMore details here."
+    )
 
 
 def test_parse_trailers_multiple():
-    raw = _TRAILER_SEP.join([
-        "Fixes: #42",
-        "Reviewed-by: Alice <alice@example.com>",
-        "Co-authored-by: Bob <bob@example.com>",
-    ])
+    raw = _TRAILER_SEP.join(
+        [
+            "Fixes: #42",
+            "Reviewed-by: Alice <alice@example.com>",
+            "Co-authored-by: Bob <bob@example.com>",
+        ]
+    )
     trailers = _parse_trailers(raw)
     assert len(trailers) == 3
     assert trailers[0].token == "Fixes"
@@ -47,18 +55,36 @@ def test_parse_trailers_empty():
 
 @pytest.fixture()
 def git_repo(tmp_path: Path) -> Path:
-    subprocess.run(["git", "init", "-b", "main"], cwd=tmp_path, check=True, capture_output=True)
-    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=tmp_path, check=True, capture_output=True)
-    subprocess.run(["git", "config", "user.name", "Test User"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "init", "-b", "main"], cwd=tmp_path, check=True, capture_output=True
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test User"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
     return tmp_path
 
 
 def _make_commit(repo: Path, message: str) -> str:
     (repo / "file.txt").write_text(message)
     subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
-    subprocess.run(["git", "commit", "-m", message], cwd=repo, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-m", message], cwd=repo, check=True, capture_output=True
+    )
     return subprocess.run(
-        ["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True, check=True
+        ["git", "rev-parse", "HEAD"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout.strip()
 
 
@@ -74,7 +100,11 @@ def test_get_single_commit(git_repo: Path):
 def test_get_commits_range(git_repo: Path):
     _make_commit(git_repo, "chore: initial commit")
     base_sha = subprocess.run(
-        ["git", "rev-parse", "HEAD"], cwd=git_repo, capture_output=True, text=True, check=True
+        ["git", "rev-parse", "HEAD"],
+        cwd=git_repo,
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout.strip()
 
     _make_commit(git_repo, "feat: feature A")

@@ -1,0 +1,150 @@
+# ---- Application configuration ----------------------------------------------
+# Optional section. All keys have sensible defaults.
+config:
+  # Exit code returned when one or more commits fail a rule. Default: 1.
+  exit_code_on_failure: 1
+
+  # Print diagnostic info (commits being checked, LLM prompts/responses) to
+  # stderr. Useful during ruleset development. Default: false.
+  debug: false
+
+rules:
+  # subject_matches_regex, subject_length, subject_prefix
+  # Applied to every commit — enforces conventional commit format and length limits.
+  - name: conventional-commits
+    checkers:
+      - type: subject_prefix
+        require_prefix: true
+        conventional: true
+        whitelist: [["feat"], ["fix"], ["chore"], ["docs"], ["style"],
+                    ["refactor"], ["test"], ["ci"]]
+      - type: subject_length
+        min: 10
+        max: 72
+
+  # subject_matches_regex with invert: true (checker negation)
+  # No WIP commits may be merged.
+  - name: no-wip-commits
+    checkers:
+      - type: subject_matches_regex
+        pattern: "^WIP:"
+        invert: true
+
+  # commit_type filter (apply rule only to fixup commits)
+  # Fixup commits must reference the original subject after "fixup! ".
+  - name: fixup-must-reference-subject
+    filters:
+      - type: commit_type
+        types: ["fixup"]
+    checkers:
+      - type: subject_length
+        min: 10
+
+  # commit_type with invert: true (filter negation — skip merge commits)
+  # All non-merge commits must follow conventional format.
+  - name: conventional-commits-non-merge
+    filters:
+      - type: commit_type
+        types: ["merge"]
+        invert: true
+    checkers:
+      - type: subject_prefix
+        require_prefix: true
+        conventional: true
+        whitelist: [["feat"], ["fix"], ["chore"], ["docs"], ["style"],
+                    ["refactor"], ["test"], ["ci"]]
+
+  # subject_prefix filter — apply rule only to ci: cram: commits
+  # Cram CI commits must have a sign-off trailer.
+  - name: cram-commits-need-signoff
+    filters:
+      - type: subject_prefix
+        any_of: [["ci", "cram"]]
+    checkers:
+      - type: trailer_present
+        required: ["Signed-off-by"]
+
+  # commit_type (apply rule only to revert commits)
+  # Revert commits must explain why in the description.
+  - name: revert-must-explain-reason
+    filters:
+      - type: commit_type
+        types: ["revert"]
+    checkers:
+      - type: description_length
+        min: 20
+
+  # description_length
+  # Commits that touch source code must carry a meaningful description.
+  - name: src-changes-need-description
+    filters:
+      - type: paths_modified
+        any_of: ["src/"]
+    checkers:
+      - type: description_length
+        min: 20
+        line_max: 100
+
+  # description_matches_regex
+  # Any commit touching docs must mention the affected section.
+  - name: docs-must-reference-section
+    filters:
+      - type: paths_modified
+        any_of: ["docs/"]
+    checkers:
+      - type: description_matches_regex
+        pattern: "(?i)section|chapter|page|readme"
+
+  # trailer_present with required
+  # Every commit must be signed off.
+  - name: require-sign-off
+    checkers:
+      - type: trailer_present
+        required: ["Signed-off-by"]
+
+  # trailer_present with at_least_one_of
+  # API changes must reference a ticket or issue.
+  - name: api-changes-need-issue-reference
+    filters:
+      - type: paths_modified
+        any_of: ["src/api/"]
+    checkers:
+      - type: trailer_present
+        at_least_one_of: [["Fixes", "Closes", "Refs"]]
+
+  # trailer_present with exactly_one_of and whitelist mode
+  # Commits must have exactly one authorship trailer and no unlisted trailers.
+  - name: enforce-authorship-trailer
+    checkers:
+      - type: trailer_present
+        exactly_one_of: [["Co-authored-by", "Reviewed-by"]]
+        whitelist: ["Signed-off-by", "Change-Id"]
+        blacklist: ["WIP"]
+        mode: whitelist
+
+  # paths_modified checker with whitelist
+  # Migration commits must not touch anything outside migrations/.
+  - name: migrations-must-be-isolated
+    filters:
+      - type: paths_modified
+        any_of: ["migrations/"]
+    checkers:
+      - type: paths_modified
+        whitelist: ["migrations/"]
+
+  # paths_modified checker with blacklist
+  # Secrets and env files must never be committed.
+  - name: no-secrets-in-commits
+    checkers:
+      - type: paths_modified
+        blacklist: [".env", ".env.local", "secrets/"]
+
+  # paths_modified checker with required
+  # Every commit touching source must include a test change.
+  - name: src-changes-must-include-tests
+    filters:
+      - type: paths_modified
+        any_of: ["src/"]
+    checkers:
+      - type: paths_modified
+        required: ["tests/"]

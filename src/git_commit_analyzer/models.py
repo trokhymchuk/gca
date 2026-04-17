@@ -64,8 +64,8 @@ class GitCommit:
 
     @property
     def is_fixup(self) -> bool:
-        """True for ``fixup!``, ``squash!``, or ``amend!`` commits created by ``git commit --fixup``."""
-        return self.subject.startswith(("fixup! ", "squash! ", "amend! "))
+        """True for ``fixup!`` commits created by ``git commit --fixup``."""
+        return self.subject.startswith("fixup! ")
 
     @property
     def is_squash(self) -> bool:
@@ -86,6 +86,17 @@ class GitCommit:
     def is_revert(self) -> bool:
         """True when the subject matches the ``Revert "<subject>"`` pattern produced by ``git revert``."""
         return self.subject.startswith('Revert "') and self.subject.endswith('"')
+
+    @property
+    def is_regular(self) -> bool:
+        """True when the commit is none of fixup, squash, amend, merge, or revert."""
+        return not (
+            self.is_fixup
+            or self.is_squash
+            or self.is_amend
+            or self.is_merge
+            or self.is_revert
+        )
 
     def trailer(self, token: str) -> list[str]:
         """Return all values for a given trailer token (case-insensitive).
