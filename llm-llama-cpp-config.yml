@@ -3,6 +3,12 @@
 
 config:
   llm:
+    # backend selects the inference library.
+    # "llama-cpp" (default): pip install 'gca[llm-llama-cpp]'
+    # "transformers":        pip install 'gca[llm-transformers]'
+    backend: llama-cpp
+
+    # --- llama-cpp options ---
     # Option A: download from Hugging Face on first run
     repo_id: "unsloth/Phi-4-mini-instruct-GGUF"
     filename: "*Q5_K_M.gguf"
@@ -11,9 +17,16 @@ config:
     # model_path: "/models/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf"
 
     context_window: 4096
+    verbose: false
+
+    # --- transformers options (used when backend: transformers) ---
+    # Loads an AutoModelForSequenceClassification from a local directory
+    # (e.g. a fine-tuned classifier trained with the commit-model repo).
+    # model_path: "/path/to/output_classifier"
+    # device: cpu        # cpu, cuda, mps (auto-detected if omitted)
+
     max_tokens: 60
     stop: ["<|im_end|>"]
-    verbose: false
 
     prompt: |
       <|im_start|>system

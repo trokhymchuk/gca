@@ -2,7 +2,6 @@
 # Compiles llama-cpp-python from source — requires C++ toolchain and cmake.
 FROM ghcr.io/astral-sh/uv:python3.12-alpine3.23 AS builder
 
-# Install necessary build tools and libraries
 RUN apk add --no-cache \
     build-base \
     cmake \
@@ -26,7 +25,7 @@ RUN CMAKE_ARGS="-DLLAMA_MUSL=ON \
     -DGGML_F16C=OFF \
     -DCMAKE_C_FLAGS='-mtune=generic' \
     -DCMAKE_CXX_FLAGS='-mtune=generic'" \
-    uv sync --frozen --no-dev --no-cache --no-editable --extra llm
+    uv sync --frozen --no-dev --no-cache --no-editable --extra llm-llama-cpp
 
 # ---- final ------------------------------------------------------------------
 FROM python:3.12-alpine3.23
@@ -39,7 +38,6 @@ RUN apk add --no-cache \
 RUN git config --global --add safe.directory '*'
 
 COPY --from=builder /app/.venv /app/.venv
-COPY llm-config.yml /app/llm-config.yml
 
 WORKDIR /app
 

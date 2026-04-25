@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+set -e
+ruff check .
+ruff format --check .

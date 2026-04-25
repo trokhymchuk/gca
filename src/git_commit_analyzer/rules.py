@@ -258,6 +258,7 @@ def _build_config(config_data: dict) -> AppConfig:
     if llm_data:
         llm_config = LlmConfig(
             prompt=llm_data["prompt"],
+            backend=llm_data.get("backend", "llama-cpp"),
             repo_id=llm_data.get("repo_id"),
             filename=llm_data.get("filename"),
             model_path=llm_data.get("model_path"),
@@ -265,6 +266,7 @@ def _build_config(config_data: dict) -> AppConfig:
             max_tokens=llm_data.get("max_tokens", 256),
             stop=llm_data.get("stop", []),
             verbose=llm_data.get("verbose", False),
+            device=llm_data.get("device", "cpu"),
         )
     return AppConfig(
         exit_code_on_failure=config_data.get("exit_code_on_failure", 1),

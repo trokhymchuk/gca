@@ -19,6 +19,7 @@ from .checkers import (
     SubjectLengthChecker,
     SubjectMatchesRegexChecker,
     SubjectPrefixChecker,
+    TrailerCanMergeChecker,
     TrailerPresentChecker,
 )
 from .filters import (
@@ -44,6 +45,7 @@ __all__ = [
     "NegatedFilter",
     "CheckResult",
     "CommitChecker",
+    "TrailerCanMergeChecker",
     "TrailerPresentChecker",
     "SubjectMatchesRegexChecker",
     "SubjectLengthChecker",

@@ -1,12 +1,11 @@
-name: Docker (llm)
-
+name: Docker (transformers)
 
 on:
   workflow_dispatch:
 
 jobs:
-  docker-llm:
-    name: Docker (llm)
+  docker-transformers:
+    name: Docker (transformers)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -22,8 +21,10 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
-          file: build/Docker/llm/Dockerfile
+          file: build/Docker/transformers/Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/gca-llm:latest
+          tags: ghcr.io/${{ github.repository_owner }}/gca-llm-transformers:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          secrets: |
+            hf_token=${{ secrets.HF_TOKEN }}

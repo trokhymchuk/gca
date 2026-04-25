@@ -1,7 +1,7 @@
 """Tests for LlmChecker and related config parsing.
 
-llama-cpp-python is an optional dependency, so _load_llama is patched in every
-test — the real inference library is never required.
+Optional backend dependencies are never required — _load_backend is patched
+in every test so no actual model library needs to be installed.
 """
 
 from datetime import datetime, timezone
@@ -61,10 +61,10 @@ def make_config(prompt: str = _REAL_PROMPT) -> LlmConfig:
     )
 
 
-def make_mock_llm(response_text: str) -> MagicMock:
-    """Return a mock Llama instance whose __call__ returns the given text."""
+def make_mock_backend(response_text: str) -> MagicMock:
+    """Return a mock LlmBackend whose generate() returns *response_text*."""
     mock = MagicMock()
-    mock.return_value = {"choices": [{"text": response_text}]}
+    mock.generate.return_value = response_text
     return mock
 
 
@@ -444,9 +444,9 @@ class TestLlmCheckerWithGoodCommits:
     @pytest.mark.parametrize("subject,description", GOOD_COMMITS)
     def test_passes_when_llm_returns_pass(self, subject: str, description: str):
         checker = LlmChecker(config=make_config())
-        mock_llm = make_mock_llm("PASS well-structured commit message")
         with patch(
-            "git_commit_analyzer.checkers.llm._load_llama", return_value=mock_llm
+            "git_commit_analyzer.checkers.llm._load_backend",
+            return_value=make_mock_backend("PASS well-structured commit message"),
         ):
             result = checker(make_commit_with_description(subject, description))
         assert result.passed is True, f"Expected pass for: {subject!r}"
@@ -459,13 +459,17 @@ class TestLlmCheckerWithGoodCommits:
         checker = LlmChecker(config=make_config(prompt="Evaluate: {commit}"))
         captured: list[str] = []
 
-        def fake_llm(prompt, **kwargs):
+        mock_backend = MagicMock()
+
+        def fake_generate(prompt, max_tokens, stop):
             captured.append(prompt)
-            return {"choices": [{"text": "PASS looks good"}]}
+            return "PASS looks good"
+
+        mock_backend.generate.side_effect = fake_generate
 
         with patch(
-            "git_commit_analyzer.checkers.llm._load_llama",
-            return_value=MagicMock(side_effect=fake_llm),
+            "git_commit_analyzer.checkers.llm._load_backend",
+            return_value=mock_backend,
         ):
             checker(make_commit_with_description(subject, description))
 
@@ -480,9 +484,9 @@ class TestLlmCheckerWithBadCommits:
     @pytest.mark.parametrize("subject,description", BAD_COMMITS)
     def test_fails_when_llm_returns_fail(self, subject: str, description: str):
         checker = LlmChecker(config=make_config())
-        mock_llm = make_mock_llm("FAIL too vague and missing context")
         with patch(
-            "git_commit_analyzer.checkers.llm._load_llama", return_value=mock_llm
+            "git_commit_analyzer.checkers.llm._load_backend",
+            return_value=make_mock_backend("FAIL too vague and missing context"),
         ):
             result = checker(make_commit_with_description(subject, description))
         assert result.passed is False, f"Expected fail for: {subject!r}"
@@ -493,13 +497,17 @@ class TestLlmCheckerWithBadCommits:
         checker = LlmChecker(config=make_config(prompt="Evaluate: {commit}"))
         captured: list[str] = []
 
-        def fake_llm(prompt, **kwargs):
+        mock_backend = MagicMock()
+
+        def fake_generate(prompt, max_tokens, stop):
             captured.append(prompt)
-            return {"choices": [{"text": "FAIL too vague"}]}
+            return "FAIL too vague"
+
+        mock_backend.generate.side_effect = fake_generate
 
         with patch(
-            "git_commit_analyzer.checkers.llm._load_llama",
-            return_value=MagicMock(side_effect=fake_llm),
+            "git_commit_analyzer.checkers.llm._load_backend",
+            return_value=mock_backend,
         ):
             checker(make_commit_with_description(subject, description))
 
@@ -515,8 +523,8 @@ class TestLlmCheckerResponseParsing:
     def _run(self, response_text: str):
         checker = LlmChecker(config=make_config())
         with patch(
-            "git_commit_analyzer.checkers.llm._load_llama",
-            return_value=make_mock_llm(response_text),
+            "git_commit_analyzer.checkers.llm._load_backend",
+            return_value=make_mock_backend(response_text),
         ):
             return checker(make_commit())
 
@@ -571,16 +579,16 @@ class TestLlmCheckerResponseParsing:
 
 
 # ---------------------------------------------------------------------------
-# LlmChecker — model loading
+# LlmChecker — backend loading
 # ---------------------------------------------------------------------------
 
 
-class TestLlmCheckerModelLoading:
-    def test_llm_loaded_once_across_multiple_calls(self):
+class TestLlmCheckerBackendLoading:
+    def test_backend_loaded_once_across_multiple_calls(self):
         checker = LlmChecker(config=make_config())
-        mock_llm = make_mock_llm("PASS ok")
         with patch(
-            "git_commit_analyzer.checkers.llm._load_llama", return_value=mock_llm
+            "git_commit_analyzer.checkers.llm._load_backend",
+            return_value=make_mock_backend("PASS ok"),
         ) as mock_load:
             checker(make_commit())
             checker(make_commit())
@@ -589,14 +597,14 @@ class TestLlmCheckerModelLoading:
     def test_load_error_becomes_failing_result(self):
         checker = LlmChecker(config=make_config())
         with patch(
-            "git_commit_analyzer.checkers.llm._load_llama",
+            "git_commit_analyzer.checkers.llm._load_backend",
             side_effect=ImportError("not installed"),
         ):
             result = checker(make_commit())
         assert result.passed is False
         assert "not installed" in result.message
 
-    def test_stop_tokens_forwarded_to_llm(self):
+    def test_stop_tokens_forwarded_to_backend(self):
         config = LlmConfig(
             prompt="{commit}",
             repo_id="test/model",
@@ -604,16 +612,29 @@ class TestLlmCheckerModelLoading:
             stop=["<|im_end|>"],
         )
         checker = LlmChecker(config=config)
-        mock_llm = make_mock_llm("PASS")
+        mock_backend = make_mock_backend("PASS")
         with patch(
-            "git_commit_analyzer.checkers.llm._load_llama", return_value=mock_llm
+            "git_commit_analyzer.checkers.llm._load_backend",
+            return_value=mock_backend,
         ):
             checker(make_commit())
-        _, kwargs = mock_llm.call_args
-        assert kwargs.get("stop") == ["<|im_end|>"]
+        mock_backend.generate.assert_called_once()
+        _prompt, _max_tokens, stop = mock_backend.generate.call_args[0]
+        assert stop == ["<|im_end|>"]
 
     def test_name(self):
         assert LlmChecker.name == "llm"
+
+    def test_default_backend_is_llama_cpp(self):
+        config = make_config()
+        assert config.backend == "llama-cpp"
+
+    def test_unknown_backend_raises(self):
+        config = LlmConfig(prompt="{commit}", repo_id="test/model", backend="unknown")
+        checker = LlmChecker(config=config)
+        result = checker(make_commit())
+        assert result.passed is False
+        assert "Unknown LLM backend" in result.message
 
 
 # ---------------------------------------------------------------------------
@@ -642,14 +663,16 @@ def make_commit_with_description(subject: str, description: str) -> GitCommit:
 class TestCommitTextSelection:
     def _capture_prompt(self, checker: LlmChecker, commit: GitCommit) -> str:
         captured: list[str] = []
+        mock_backend = MagicMock()
 
-        def fake_llm(prompt, **kwargs):
+        def fake_generate(prompt, max_tokens, stop):
             captured.append(prompt)
-            return {"choices": [{"text": "PASS ok"}]}
+            return "PASS ok"
 
+        mock_backend.generate.side_effect = fake_generate
         with patch(
-            "git_commit_analyzer.checkers.llm._load_llama",
-            return_value=MagicMock(side_effect=fake_llm),
+            "git_commit_analyzer.checkers.llm._load_backend",
+            return_value=mock_backend,
         ):
             checker(commit)
         return captured[0]
@@ -792,6 +815,37 @@ rules: []
         assert llm.context_window == 2048
         assert llm.max_tokens == 60
         assert llm.stop == ["<|im_end|>"]
+
+    def test_llm_backend_parsed_from_yaml(self, tmp_path: Path):
+        yaml_file = tmp_path / "rules.yml"
+        yaml_file.write_text("""
+config:
+  llm:
+    backend: transformers
+    model_path: "/path/to/output_classifier"
+    device: cuda
+    prompt: "{commit}"
+rules: []
+""")
+        llm = load_config(yaml_file).config.llm
+        assert llm is not None
+        assert llm.backend == "transformers"
+        assert llm.model_path == "/path/to/output_classifier"
+        assert llm.device == "cuda"
+
+    def test_llm_backend_defaults_to_llama_cpp(self, tmp_path: Path):
+        yaml_file = tmp_path / "rules.yml"
+        yaml_file.write_text("""
+config:
+  llm:
+    repo_id: "test/model"
+    filename: "*.gguf"
+    prompt: "Review: {commit}"
+rules: []
+""")
+        llm = load_config(yaml_file).config.llm
+        assert llm is not None
+        assert llm.backend == "llama-cpp"
 
     def test_llm_checker_in_rule_requires_llm_config(self, tmp_path: Path):
         yaml_file = tmp_path / "rules.yml"

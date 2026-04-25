@@ -1,0 +1,16 @@
+config:
+  llm:
+    backend: transformers
+    model_path: "/opt/output_classifier_production"
+    device: cpu
+    prompt: "{commit}"
+
+rules:
+  - name: llm-commit-review
+    filters:
+      - type: commit_type
+        types: ["regular"]
+    checkers:
+      - type: llm
+        include_subject: true
+        include_description: true

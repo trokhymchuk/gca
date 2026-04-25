@@ -13,13 +13,14 @@ from .subject import (
     SubjectMatchesRegexChecker,
     SubjectPrefixChecker,
 )
-from .trailer import TrailerPresentChecker
+from .trailer import TrailerCanMergeChecker, TrailerPresentChecker
 
 
 __all__ = [
     "CheckResult",
     "CommitChecker",
     "NegatedChecker",
+    "TrailerCanMergeChecker",
     "TrailerPresentChecker",
     "SubjectMatchesRegexChecker",
     "SubjectLengthChecker",

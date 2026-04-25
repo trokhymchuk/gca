@@ -1,0 +1,43 @@
+# ---- builder ----------------------------------------------------------------
+# PyTorch does not ship musl/Alpine wheels — use glibc-based slim image.
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
+
+WORKDIR /app
+
+ARG UV_EXTRA=llm-transformers
+
+COPY pyproject.toml uv.lock ./
+COPY src/ src/
+
+RUN uv sync --frozen --no-dev --no-cache --no-editable --extra "${UV_EXTRA}"
+
+# ---- model ------------------------------------------------------------------
+# Download the private model into a separate stage to keep credentials out of
+# the final image layers. The HF token is mounted as a build secret.
+FROM python:3.12-slim-bookworm AS model
+
+ARG MODEL_ID=trokhymchuk/commit-quality-model
+
+RUN pip install --no-cache-dir huggingface-hub
+
+RUN --mount=type=secret,id=hf_token \
+    HF_TOKEN=$(cat /run/secrets/hf_token) \
+    hf download "${MODEL_ID}" \
+        --local-dir /opt/output_classifier_production
+
+# ---- final ------------------------------------------------------------------
+FROM python:3.12-slim-bookworm
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+RUN git config --global --add safe.directory '*'
+
+COPY --from=builder /app/.venv /app/.venv
+COPY --from=model /opt/output_classifier_production /opt/output_classifier_production
+
+WORKDIR /app
+
+ENV PATH="/app/.venv/bin:$PATH"
+
+# ENTRYPOINT ["gca", "analyze"]

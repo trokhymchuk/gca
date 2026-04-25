@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 
 @dataclass
 class LlmConfig:
-    """Configuration for the llama-cpp-python LLM checker.
+    """Configuration for the LLM checker.
 
     At least one of :attr:`model_path` or (:attr:`repo_id` + :attr:`filename`)
     must be provided so the checker knows which model to load.
@@ -15,11 +15,15 @@ class LlmConfig:
             is replaced with the subject and/or description of the commit.
             The model must reply with ``PASS`` or ``FAIL`` as the very first word,
             optionally followed by a one-sentence explanation.
+        backend: Backend to use for inference.  ``"llama-cpp"`` (default) uses
+            ``llama-cpp-python`` with GGUF models; ``"transformers"`` uses
+            HuggingFace ``transformers`` + ``torch``.
         repo_id: Hugging Face repository ID, e.g. ``"Qwen/Qwen2.5-3B-Instruct-GGUF"``.
             Mutually exclusive with :attr:`model_path`.
         filename: GGUF filename or glob pattern within the HF repo,
-            e.g. ``"*q4_k_m.gguf"``.  Used together with :attr:`repo_id`.
-        model_path: Local filesystem path to a ``.gguf`` model file.
+            e.g. ``"*q4_k_m.gguf"``.  Used together with :attr:`repo_id` for
+            the ``llama-cpp`` backend.
+        model_path: Local filesystem path to a model file or directory.
             Mutually exclusive with :attr:`repo_id` / :attr:`filename`.
         context_window: Number of tokens in the model's context window
             (``n_ctx`` llama-cpp option).  Defaults to ``4096``.
@@ -27,11 +31,14 @@ class LlmConfig:
             Defaults to ``256``.
         stop: List of stop strings that terminate generation early.
             Defaults to an empty list.
-        verbose: Whether llama-cpp should print progress / loading info to
-            stderr.  Defaults to ``False``.
+        verbose: Whether the backend should print loading info to stderr.
+            Defaults to ``False``.
+        device: Device to run inference on for the ``transformers`` backend,
+            e.g. ``"cpu"``, ``"cuda"``, or ``"mps"``.  Defaults to ``"cpu"``.
     """
 
     prompt: str
+    backend: str = "llama-cpp"
     repo_id: str | None = None
     filename: str | None = None
     model_path: str | None = None
@@ -39,6 +46,7 @@ class LlmConfig:
     max_tokens: int = 256
     stop: list[str] = field(default_factory=list)
     verbose: bool = False
+    device: str = "cpu"
 
 
 @dataclass

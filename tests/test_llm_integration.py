@@ -1,21 +1,24 @@
-"""Integration tests for LlmChecker against a real local LLM.
+"""Integration tests for LlmChecker against a real model.
 
 These tests are SKIPPED automatically when:
-  - llama-cpp-python is not installed, OR
-  - llm-config.yml is not present at the project root.
+  - the required backend library is not installed, OR
+  - the config file is not present at the project root.
 
-To run them:
-    pip install 'gca[llm]'
-    # ensure llm-config.yml exists and points to a valid model
-    pytest tests/test_llm_integration.py -v
+Select which config to test against with the GCA_LLM_CONFIG env var:
+
+    GCA_LLM_CONFIG=llm-transformers-config.yml pytest tests/test_llm_integration.py -v
+    GCA_LLM_CONFIG=llm-config.yml             pytest tests/test_llm_integration.py -v
+
+Defaults to llm-config.yml when the variable is not set.
 
 The model is loaded once per session so all commits share one load cost.
-Commit fixtures are loaded from tests/commits/main.json and tests/commits/extra.json.
+Commit fixtures are loaded from tests/commits/*.json.
 """
 
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -25,23 +28,57 @@ from git_commit_analyzer import GitCommit, LlmChecker
 from git_commit_analyzer.rules import load_config
 
 # ---------------------------------------------------------------------------
-# Config and skip guards
+# Config path — override via GCA_LLM_CONFIG env var
 # ---------------------------------------------------------------------------
 
-_CONFIG_PATH = Path(__file__).parent.parent / "llm-config.yml"
+_ROOT = Path(__file__).parent.parent
+_CONFIG_NAME = os.environ.get("GCA_LLM_CONFIG", "llm-config.yml")
+_CONFIG_PATH = _ROOT / _CONFIG_NAME
 _COMMITS_DIR = Path(__file__).parent / "commits"
 
+# ---------------------------------------------------------------------------
+# Backend availability checks
+# ---------------------------------------------------------------------------
+
+_backend = "llama-cpp"  # default; updated below after reading config
+if _CONFIG_PATH.exists():
+    try:
+        import yaml
+
+        _raw = yaml.safe_load(_CONFIG_PATH.read_text())
+        _backend = (
+            (_raw or {}).get("config", {}).get("llm", {}).get("backend", "llama-cpp")
+        )
+    except Exception:
+        pass
+
+_LLAMA_AVAILABLE = False
+_TRANSFORMERS_AVAILABLE = False
 try:
     import llama_cpp  # noqa: F401
 
     _LLAMA_AVAILABLE = True
 except ImportError:
-    _LLAMA_AVAILABLE = False
+    pass
+try:
+    import transformers  # noqa: F401
+    import torch  # noqa: F401
+
+    _TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    pass
+
+_backend_available = (_backend == "llama-cpp" and _LLAMA_AVAILABLE) or (
+    _backend == "transformers" and _TRANSFORMERS_AVAILABLE
+)
 
 pytestmark = [
     pytest.mark.integration,
-    pytest.mark.skipif(not _LLAMA_AVAILABLE, reason="llama-cpp-python not installed"),
-    pytest.mark.skipif(not _CONFIG_PATH.exists(), reason="llm-config.yml not found"),
+    pytest.mark.skipif(not _CONFIG_PATH.exists(), reason=f"{_CONFIG_NAME} not found"),
+    pytest.mark.skipif(
+        not _backend_available,
+        reason=f"backend '{_backend}' dependencies not installed",
+    ),
 ]
 
 # ---------------------------------------------------------------------------
@@ -81,7 +118,7 @@ def llm_checker() -> LlmChecker:
     rf = load_config(_CONFIG_PATH)
     checker = rf.ruleset.rules[0].checkers[0]
     assert isinstance(checker, LlmChecker)
-    checker._get_llm()  # eagerly load so timing shows in fixture, not first test
+    checker._get_backend()  # eagerly load so timing shows in fixture, not first test
     return checker
 
 
