@@ -1,0 +1,28 @@
+name: Docker llama-cpp — Test
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["Docker llama-cpp — Build"]
+    types: [completed]
+
+jobs:
+  test:
+    name: Test (llama-cpp)
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: build/Docker/llama-cpp/Dockerfile
+          target: test
+          load: true
+          tags: gca-llm-llama-cpp-test:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - run: docker run --rm -e HF_TOKEN=${{ secrets.HF_TOKEN }} gca-llm-llama-cpp-test:latest

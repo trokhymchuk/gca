@@ -1,0 +1,30 @@
+name: Docker Transformers — Test
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["Docker Transformers — Build"]
+    types: [completed]
+
+jobs:
+  test:
+    name: Test (transformers)
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: build/Docker/transformers/Dockerfile
+          target: test
+          load: true
+          tags: gca-llm-transformers-test:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          secrets: |
+            hf_token=${{ secrets.HF_TOKEN }}
+      - run: docker run --rm gca-llm-transformers-test:latest
