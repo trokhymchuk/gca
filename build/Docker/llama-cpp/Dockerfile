@@ -28,7 +28,7 @@ RUN CMAKE_ARGS="-DLLAMA_MUSL=ON \
     uv sync --frozen --no-dev --no-cache --no-editable --extra llm-llama-cpp
 
 # ---- final ------------------------------------------------------------------
-FROM python:3.12-alpine3.23
+FROM python:3.12-alpine3.23 AS final
 
 RUN apk add --no-cache \
     git \
@@ -45,3 +45,19 @@ ENV PATH="/app/.venv/bin:$PATH"
 ENV HF_HOME=/root/.cache/huggingface
 
 # ENTRYPOINT ["gca", "analyze"]
+
+# ---- test -------------------------------------------------------------------
+FROM final AS test
+
+COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv
+ENV VIRTUAL_ENV=/app/.venv
+RUN uv pip install pytest
+
+COPY tests/ /app/tests/
+COPY pyproject.toml /app/pyproject.toml
+COPY llm-llama-cpp-config.yml /app/llm-llama-cpp-config.yml
+
+ENV GCA_LLM_CONFIG=llm-llama-cpp-config.yml
+
+WORKDIR /app
+CMD ["/app/.venv/bin/pytest", "-m", "integration", "-v", "tests/"]

@@ -51,8 +51,8 @@ config:
 rules:
   - name: llm-commit-review
     filters:
-      - type: is_merge
-        invert: true
+      - type: commit_type
+        types: ["regular"]
     checkers:
       - type: llm
         include_subject: true

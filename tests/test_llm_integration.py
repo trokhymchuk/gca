@@ -32,7 +32,7 @@ from git_commit_analyzer.rules import load_config
 # ---------------------------------------------------------------------------
 
 _ROOT = Path(__file__).parent.parent
-_CONFIG_NAME = os.environ.get("GCA_LLM_CONFIG", "llm-config.yml")
+_CONFIG_NAME = os.environ.get("GCA_LLM_CONFIG", "llm-llama-cpp-config.yml")
 _CONFIG_PATH = _ROOT / _CONFIG_NAME
 _COMMITS_DIR = Path(__file__).parent / "commits"
 

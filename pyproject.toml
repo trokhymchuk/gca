@@ -2,7 +2,7 @@
 name = "gca"
 version = "0.1.0"
 description = "Git commit analyzer for CI pipelines"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     "click>=8.0",
     "pyyaml>=6.0",
@@ -24,13 +24,18 @@ build-backend = "hatchling.build"
 packages = ["src/git_commit_analyzer"]
 
 [dependency-groups]
-dev = [
+dev-no-llm = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
     "ruff>=0.15.11",
 ]
-llm-llama-cpp = [{ include-group = "dev" }, "llama-cpp-python>=0.3", "huggingface-hub>=0.23"]
-llm-transformers = [{ include-group = "dev" }, "transformers>=4.0", "torch>=2.0"]
+dev = [
+    { include-group = "dev-no-llm" },
+    { include-group = "llm-llama-cpp" },
+    { include-group = "llm-transformers" },
+]
+llm-llama-cpp = ["llama-cpp-python>=0.3", "huggingface-hub>=0.23"]
+llm-transformers = ["transformers>=5.0", "torch>=2.0"]
 
 [tool.uv.sources]
 torch = [

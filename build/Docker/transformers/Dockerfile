@@ -26,7 +26,7 @@ RUN --mount=type=secret,id=hf_token \
         --local-dir /opt/output_classifier_production
 
 # ---- final ------------------------------------------------------------------
-FROM python:3.12-slim-bookworm
+FROM python:3.12-slim-bookworm AS final
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git \
@@ -41,3 +41,19 @@ WORKDIR /app
 ENV PATH="/app/.venv/bin:$PATH"
 
 # ENTRYPOINT ["gca", "analyze"]
+
+# ---- test -------------------------------------------------------------------
+FROM final AS test
+
+COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv
+ENV VIRTUAL_ENV=/app/.venv
+RUN uv pip install pytest
+
+COPY tests/ /app/tests/
+COPY pyproject.toml /app/pyproject.toml
+COPY llm-transformers-config.yml /app/llm-transformers-config.yml
+
+ENV GCA_LLM_CONFIG=llm-transformers-config.yml
+
+WORKDIR /app
+CMD ["/app/.venv/bin/pytest", "-m", "integration", "-v", "tests/"]
