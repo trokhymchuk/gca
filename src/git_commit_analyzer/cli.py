@@ -120,6 +120,14 @@ def main(ctx: click.Context, color: bool | None) -> None:
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
     help="YAML config file. Repeat to load multiple files; rules are concatenated and configs merged (last wins).",
 )
+@click.option(
+    "--top-n",
+    "-n",
+    "top_n",
+    default=None,
+    type=click.IntRange(min=1),
+    help="Limit analysis to the N most recent commits.",
+)
 def analyze(
     ctx: click.Context,
     repo_path: Path,
@@ -128,6 +136,7 @@ def analyze(
     output_format: str,
     no_merges: bool,
     config_paths: tuple[Path, ...],
+    top_n: int | None,
 ) -> None:
     """Analyze git commits in REPO_PATH.
 
@@ -142,6 +151,7 @@ def analyze(
       gca analyze . --base-ref origin/main --head-ref feature-branch
       gca analyze . --base-ref $CI_MERGE_REQUEST_DIFF_BASE_SHA --format json
       gca analyze . --base-ref main --config rules.yml
+      gca analyze . --base-ref main --top-n 10
     """
     try:
         commits = get_commits(repo_path, base_ref=base_ref, head_ref=head_ref)
@@ -151,6 +161,9 @@ def analyze(
 
     if no_merges:
         commits = [c for c in commits if not c.is_merge]
+
+    if top_n is not None:
+        commits = commits[:top_n]
 
     if not commits:
         click.echo("No commits found.", err=True)

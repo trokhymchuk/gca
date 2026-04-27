@@ -33,6 +33,9 @@ gca analyze . --base-ref main
 # Validate against a rule config
 gca analyze . --base-ref main --config rules.yml
 
+# Analyze only the 10 most recent commits
+gca analyze . --base-ref main --top-n 10
+
 # GitLab CI
 gca analyze . --base-ref $CI_MERGE_REQUEST_DIFF_BASE_SHA --config rules.yml
 

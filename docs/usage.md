@@ -19,6 +19,7 @@ gca analyze [OPTIONS] [REPO_PATH]
 | `--format [text\|json]` | `-f` | `text` | Output format. `text` is colorized and human-readable; `json` is structured and suitable for further processing. |
 | `--no-merges` | — | `false` | Exclude merge commits from the output. |
 | `--config FILE` | `-c` | — | YAML config file. Repeatable — rules are concatenated across files, `config:` fields are merged (last file wins per field, except `debug` where any `true` wins). |
+| `--top-n INT` | `-n` | — | Limit analysis to the N most recent commits. Applied after `--no-merges`. |
 
 **Examples**
 
@@ -40,6 +41,9 @@ gca analyze . --base-ref main --config rules.yml
 
 # Layer configs: org-wide base overridden by project-specific
 gca analyze . --base-ref main --config base.yml --config project.yml
+
+# Analyze only the 10 most recent commits
+gca analyze . --base-ref main --top-n 10
 ```
 
 ---
