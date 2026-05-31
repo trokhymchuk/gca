@@ -4,6 +4,8 @@ config:
     model_path: /opt/output_classifier_production
     device: cpu
     prompt: "{commit}"
+    threshold: 0.5
+    fail_message: "Commit message does not meet quality standards. Write a clear subject in the imperative mood (e.g. 'fix: resolve login timeout'), add a body explaining why the change was made, and follow the conventional commits format ('type(scope): description' or scope: description)."
 
 rules:
   - name: llm-commit-review

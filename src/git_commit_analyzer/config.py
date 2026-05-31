@@ -35,6 +35,12 @@ class LlmConfig:
             Defaults to ``False``.
         device: Device to run inference on for the ``transformers`` backend,
             e.g. ``"cpu"``, ``"cuda"``, or ``"mps"``.  Defaults to ``"cpu"``.
+        threshold: Minimum positive-class probability required to pass for the
+            ``transformers`` backend.  Commits whose score is below this value
+            are rejected.  Defaults to ``0.5``.
+        fail_message: Custom message printed before the score and threshold when
+            a commit is rejected by the ``transformers`` backend.  When empty
+            only the score and threshold are shown.  Defaults to ``""``.
     """
 
     prompt: str
@@ -47,6 +53,8 @@ class LlmConfig:
     stop: list[str] = field(default_factory=list)
     verbose: bool = False
     device: str = "cpu"
+    threshold: float = 0.5
+    fail_message: str = ""
 
 
 @dataclass

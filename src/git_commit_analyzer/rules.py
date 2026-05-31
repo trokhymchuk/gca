@@ -267,6 +267,8 @@ def _build_config(config_data: dict) -> AppConfig:
             stop=llm_data.get("stop", []),
             verbose=llm_data.get("verbose", False),
             device=llm_data.get("device", "cpu"),
+            threshold=llm_data.get("threshold", 0.5),
+            fail_message=llm_data.get("fail_message", ""),
         )
     return AppConfig(
         exit_code_on_failure=config_data.get("exit_code_on_failure", 1),

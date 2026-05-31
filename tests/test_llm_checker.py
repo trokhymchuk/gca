@@ -872,3 +872,160 @@ rules:
         checker = rf.ruleset.rules[0].checkers[0]
         assert isinstance(checker, LlmChecker)
         assert checker.config.repo_id == "Qwen/Qwen2.5-0.5B-Instruct-GGUF"
+
+    def test_threshold_parsed_from_yaml(self, tmp_path: Path):
+        yaml_file = tmp_path / "rules.yml"
+        yaml_file.write_text("""
+config:
+  llm:
+    backend: transformers
+    model_path: "/path/to/model"
+    prompt: "{commit}"
+    threshold: 0.75
+rules: []
+""")
+        llm = load_config(yaml_file).config.llm
+        assert llm is not None
+        assert llm.threshold == 0.75
+
+    def test_threshold_defaults_to_0_5(self, tmp_path: Path):
+        yaml_file = tmp_path / "rules.yml"
+        yaml_file.write_text("""
+config:
+  llm:
+    repo_id: "test/model"
+    filename: "*.gguf"
+    prompt: "{commit}"
+rules: []
+""")
+        llm = load_config(yaml_file).config.llm
+        assert llm is not None
+        assert llm.threshold == 0.5
+
+    def test_fail_message_parsed_from_yaml(self, tmp_path: Path):
+        yaml_file = tmp_path / "rules.yml"
+        yaml_file.write_text("""
+config:
+  llm:
+    backend: transformers
+    model_path: "/path/to/model"
+    prompt: "{commit}"
+    fail_message: "Commit quality is too low."
+rules: []
+""")
+        llm = load_config(yaml_file).config.llm
+        assert llm is not None
+        assert llm.fail_message == "Commit quality is too low."
+
+    def test_fail_message_defaults_to_empty(self, tmp_path: Path):
+        yaml_file = tmp_path / "rules.yml"
+        yaml_file.write_text("""
+config:
+  llm:
+    repo_id: "test/model"
+    filename: "*.gguf"
+    prompt: "{commit}"
+rules: []
+""")
+        llm = load_config(yaml_file).config.llm
+        assert llm is not None
+        assert llm.fail_message == ""
+
+
+# ---------------------------------------------------------------------------
+# TransformersBackend — threshold and fail_message
+# ---------------------------------------------------------------------------
+
+
+class TestTransformersBackendThresholdAndMessage:
+    """Unit tests for TransformersBackend threshold/fail_message behaviour.
+
+    The actual transformers library is never imported — torch and the model are
+    fully mocked so the backend's generate() logic can be tested in isolation.
+    """
+
+    def _make_backend(
+        self,
+        good_prob: float,
+        threshold: float = 0.5,
+        fail_message: str = "",
+    ) -> str:
+        """Run generate() with a fully mocked torch so torch need not be installed."""
+        import sys
+        from contextlib import contextmanager
+
+        from git_commit_analyzer.checkers.llm._transformers import TransformersBackend
+
+        # Build the backend directly, bypassing __init__ entirely.
+        backend = TransformersBackend.__new__(TransformersBackend)
+        backend._tokenizer = MagicMock()
+        backend._model = MagicMock()
+        backend._model.device = "cpu"
+        backend._threshold = threshold
+        backend._fail_message = fail_message
+
+        # Fake probs[1].item() chain that returns good_prob.
+        fake_prob_item = MagicMock()
+        fake_prob_item.item.return_value = good_prob
+        fake_probs = MagicMock()
+        fake_probs.__getitem__.return_value = fake_prob_item
+        fake_softmax_out = MagicMock()
+        fake_softmax_out.__getitem__.return_value = fake_probs
+
+        mock_F = MagicMock()
+        mock_F.softmax.return_value = fake_softmax_out
+
+        @contextmanager
+        def fake_no_grad():
+            yield
+
+        mock_torch = MagicMock()
+        mock_torch.no_grad = fake_no_grad
+        mock_torch.nn.functional = mock_F
+
+        with patch.dict(
+            sys.modules,
+            {
+                "torch": mock_torch,
+                "torch.nn": MagicMock(),
+                "torch.nn.functional": mock_F,
+            },
+        ):
+            return backend.generate("prompt", 256, [])
+
+    def test_pass_when_above_default_threshold(self):
+        result = self._make_backend(good_prob=0.8)
+        assert result.startswith("PASS")
+
+    def test_fail_when_below_default_threshold(self):
+        result = self._make_backend(good_prob=0.3)
+        assert result.startswith("FAIL")
+
+    def test_fail_when_below_custom_threshold(self):
+        result = self._make_backend(good_prob=0.65, threshold=0.7)
+        assert result.startswith("FAIL")
+
+    def test_pass_when_above_custom_threshold(self):
+        result = self._make_backend(good_prob=0.75, threshold=0.7)
+        assert result.startswith("PASS")
+
+    def test_fail_includes_score_and_threshold(self):
+        result = self._make_backend(good_prob=0.4, threshold=0.7)
+        assert "score:" in result
+        assert "threshold:" in result
+        assert "40.0%" in result
+        assert "70.0%" in result
+
+    def test_fail_includes_custom_message(self):
+        result = self._make_backend(
+            good_prob=0.3, threshold=0.5, fail_message="Commit quality is too low."
+        )
+        assert "Commit quality is too low." in result
+        assert "score:" in result
+        assert "threshold:" in result
+
+    def test_fail_without_custom_message_shows_score_and_threshold(self):
+        result = self._make_backend(good_prob=0.3, threshold=0.5, fail_message="")
+        assert "score:" in result
+        assert "threshold:" in result
+        assert "Commit quality" not in result

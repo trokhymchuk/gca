@@ -38,6 +38,8 @@ class TransformersBackend(LlmBackend):
         self._model = AutoModelForSequenceClassification.from_pretrained(model_id)
         self._model.eval()
         self._model.to(config.device)
+        self._threshold = config.threshold
+        self._fail_message = config.fail_message
 
     def generate(self, prompt: str, max_tokens: int, stop: list[str]) -> str:
         import torch
@@ -55,7 +57,13 @@ class TransformersBackend(LlmBackend):
             probs = F.softmax(logits, dim=-1)[0]
 
         good_prob = probs[1].item()
-        confidence = round(max(good_prob, 1 - good_prob) * 100, 1)
-        if good_prob >= 0.5:
+        if good_prob >= self._threshold:
+            confidence = round(max(good_prob, 1 - good_prob) * 100, 1)
             return f"PASS {confidence}% confidence"
-        return f"FAIL {confidence}% confidence"
+
+        score = round(good_prob * 100, 1)
+        threshold_pct = round(self._threshold * 100, 1)
+        details = f"(score: {score}%, threshold: {threshold_pct}%)"
+        if self._fail_message:
+            return f"FAIL {self._fail_message} {details}"
+        return f"FAIL {details}"
