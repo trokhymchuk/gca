@@ -12,6 +12,7 @@ from .checkers import (
     CommitChecker,
     DescriptionLengthChecker,
     DescriptionMatchesRegexChecker,
+    DcoEmailDomainWhitelistChecker,
     IsolateChangesChecker,
     PathsModifiedChecker,
     LlmChecker,
@@ -21,6 +22,7 @@ from .checkers import (
     SubjectPrefixChecker,
     TrailerCanMergeChecker,
     TrailerPresentChecker,
+    TrailerValueChecker,
 )
 from .filters import (
     CommitFilter,
@@ -45,8 +47,10 @@ __all__ = [
     "NegatedFilter",
     "CheckResult",
     "CommitChecker",
+    "DcoEmailDomainWhitelistChecker",
     "TrailerCanMergeChecker",
     "TrailerPresentChecker",
+    "TrailerValueChecker",
     "SubjectMatchesRegexChecker",
     "SubjectLengthChecker",
     "SubjectPrefixChecker",

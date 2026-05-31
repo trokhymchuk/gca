@@ -356,6 +356,67 @@ checkers:
     mode: whitelist
 ```
 
+#### `trailer_value`
+
+Validates the values of one or more git trailers. Every listed trailer is checked independently; all must pass.
+
+| Parameter | Description |
+|---|---|
+| `trailers` | List of trailer tokens to inspect (case-insensitive). |
+| `mode` | `whitelist` — each trailer must have a matching value. `blacklist` — no trailer may have a matching value. |
+| `literals` | Exact string values to compare against (case-sensitive). |
+| `regexps` | Regular expression patterns evaluated with `re.search` against each value. |
+
+At least one of `literals` or `regexps` must be provided.
+
+- `whitelist` mode: fails for any trailer that is absent or has no matching value.
+- `blacklist` mode: fails for any trailer that has a matching value; passes when a trailer is absent.
+
+```yaml
+# Both Fixes and Closes must reference a JIRA ticket
+checkers:
+  - type: trailer_value
+    trailers: [Fixes, Closes]
+    mode: whitelist
+    regexps: ["^JIRA-\\d+"]
+
+# Neither WIP nor Skip-CI may be set to "true"
+checkers:
+  - type: trailer_value
+    trailers: [WIP, Skip-CI]
+    mode: blacklist
+    literals: ["true", "yes"]
+
+# Signed-off-by must not be a bot account
+checkers:
+  - type: trailer_value
+    trailers: [Signed-off-by]
+    mode: blacklist
+    regexps: ["bot@example\\.com"]
+```
+
+#### `dco_email_domain_whitelist`
+
+Validates that every DCO trailer email address comes from an allowed domain. Each trailer value is expected to contain an email in `Name <email@domain.com>` or bare `email@domain.com` format. Trailers that are absent are silently skipped. Fails if a value contains no parseable email, or if the email's domain is not in the whitelist.
+
+| Parameter | Description |
+|---|---|
+| `domains` | List of allowed email domains (case-insensitive). Required; must not be empty. |
+| `trailers` | Trailer tokens to inspect. Default: `[Signed-off-by]`. |
+
+```yaml
+# Signed-off-by emails must come from known domains
+checkers:
+  - type: dco_email_domain_whitelist
+    domains: [example.com, corp.org]
+
+# Apply the same check to Co-authored-by as well
+checkers:
+  - type: dco_email_domain_whitelist
+    trailers: [Signed-off-by, Co-authored-by]
+    domains: [example.com]
+```
+
 #### `trailer_can_merge`
 
 Ensures listed trailers appear at most once.
@@ -529,7 +590,7 @@ rules:
         groups:
           - [db/migrations/]
 
-  # Require sign-off on all regular commits
+  # Require sign-off on all regular commits, from a known email domain
   - name: require-sign-off
     filters:
       - type: commit_type
@@ -537,6 +598,8 @@ rules:
     checkers:
       - type: trailer_present
         required: [Signed-off-by]
+      - type: dco_email_domain_whitelist
+        domains: [example.com]
 ```
 
 ---

@@ -3,7 +3,7 @@ from typing import Protocol
 
 import pytest
 
-from git_commit_analyzer import GitCommit
+from git_commit_analyzer import GitCommit, Trailer
 
 _NOW = datetime(2024, 1, 1, tzinfo=timezone.utc)
 
@@ -14,6 +14,7 @@ class MakeCommit(Protocol):
         changed_files: list[str] | None = ...,
         subject: str = ...,
         parent_shas: list[str] | None = ...,
+        trailers: list[Trailer] | None = ...,
     ) -> GitCommit: ...
 
 
@@ -23,13 +24,14 @@ def make_commit() -> MakeCommit:
         changed_files: list[str] | None = None,
         subject: str = "feat: test",
         parent_shas: list[str] | None = None,
+        trailers: list[Trailer] | None = None,
     ) -> GitCommit:
         return GitCommit(
             sha="a" * 40,
             subject=subject,
             body="",
             description="",
-            trailers=[],
+            trailers=trailers or [],
             parent_shas=parent_shas or [],
             changed_files=changed_files or [],
             author_name="Test",
