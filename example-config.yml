@@ -1,150 +1,289 @@
+# =============================================================================
+# gca — feature showcase configuration
+# -----------------------------------------------------------------------------
+# This file exercises EVERY filter and checker gca supports (except the `llm`
+# checker, which needs a model and a `config.llm` section). It is meant as a
+# reference, not a sensible ruleset — many rules here would conflict in real
+# use. See docs/usage.md for the full parameter reference.
+#
+# Two options apply to ANY checker (and `invert` to any filter too):
+#   invert: true          negate the result
+#   fail_message: "..."   extra guidance appended to the failure output
+#
+# Regex patterns use single-quoted YAML so backslashes stay literal.
+# =============================================================================
+
 # ---- Application configuration ----------------------------------------------
-# Optional section. All keys have sensible defaults.
+# Optional section; every key has a default.
 config:
   # Exit code returned when one or more commits fail a rule. Default: 1.
   exit_code_on_failure: 1
-
-  # Print diagnostic info (commits being checked, LLM prompts/responses) to
-  # stderr. Useful during ruleset development. Default: false.
+  # Print diagnostic info (commits being checked) to stderr. Default: false.
   debug: false
 
 rules:
-  # subject_matches_regex, subject_length, subject_prefix
-  # Applied to every commit — enforces conventional commit format and length limits.
-  - name: conventional-commits
+  # ===========================================================================
+  # FILTERS — decide which commits a rule applies to. All filters on a rule
+  # must pass (AND). Any filter can be negated with `invert: true`.
+  # ===========================================================================
+
+  # commit_type — match by kind: regular, merge, revert, fixup, squash, amend.
+  - name: filter-commit-type
+    filters:
+      - type: commit_type
+        types: [regular, revert]
     checkers:
+      - type: subject_length
+        min: 1
+
+  # commit_type with invert — apply to everything EXCEPT merge commits.
+  - name: filter-commit-type-inverted
+    filters:
+      - type: commit_type
+        types: [merge]
+        invert: true
+    checkers:
+      - type: subject_length
+        min: 1
+
+  # subject_prefix — any_of: the prefix chain matches at least one pattern.
+  - name: filter-subject-prefix-any-of
+    filters:
       - type: subject_prefix
-        require_prefix: true
-        conventional: true
-        whitelist: [["feat"], ["fix"], ["chore"], ["docs"], ["style"],
-                    ["refactor"], ["test"], ["ci"]]
+        any_of: [[feat], [fix], [ci, cram]]
+    checkers:
+      - type: subject_length
+        max: 72
+
+  # subject_prefix — all_of: the chain matches every listed pattern.
+  - name: filter-subject-prefix-all-of
+    filters:
+      - type: subject_prefix
+        all_of: [[ci]]
+    checkers:
+      - type: subject_length
+        max: 72
+
+  # paths_modified — any_of: at least one listed path is among changed files.
+  # Path forms: "dir/" (prefix), "*.py"/"a?b"/"[abc]" (glob), "exact/file.txt".
+  - name: filter-paths-any-of
+    filters:
+      - type: paths_modified
+        any_of: [src/, "*.md", Makefile]
+    checkers:
+      - type: description_length
+        min: 1
+
+  # paths_modified — all_of: every listed path has a matching changed file.
+  - name: filter-paths-all-of
+    filters:
+      - type: paths_modified
+        all_of: [src/, tests/]
+    checkers:
+      - type: description_length
+        min: 1
+
+  # ===========================================================================
+  # SUBJECT CHECKERS
+  # ===========================================================================
+
+  # subject_length — character bounds (min and/or max). Shows fail_message.
+  - name: subject-length
+    checkers:
       - type: subject_length
         min: 10
         max: 72
+        fail_message: "Keep the subject between 10 and 72 characters."
 
-  # subject_matches_regex with invert: true (checker negation)
-  # No WIP commits may be merged.
-  - name: no-wip-commits
+  # subject_matches_regex — subject must match the pattern (re.search).
+  - name: subject-matches-regex
     checkers:
       - type: subject_matches_regex
-        pattern: "^WIP:"
-        invert: true
+        pattern: '^[a-z0-9_-]+: '
 
-  # commit_type filter (apply rule only to fixup commits)
-  # Fixup commits must reference the original subject after "fixup! ".
-  - name: fixup-must-reference-subject
-    filters:
-      - type: commit_type
-        types: ["fixup"]
+  # subject_matches_regex with invert — subject must NOT match (no WIP).
+  - name: subject-must-not-match
     checkers:
-      - type: subject_length
-        min: 10
-
-  # commit_type with invert: true (filter negation — skip merge commits)
-  # All non-merge commits must follow conventional format.
-  - name: conventional-commits-non-merge
-    filters:
-      - type: commit_type
-        types: ["merge"]
+      - type: subject_matches_regex
+        pattern: '(?i)\bwip\b'
         invert: true
+        fail_message: "Don't merge work-in-progress commits."
+
+  # subject_prefix — require a prefix in conventional `type(scope): …` form.
+  - name: subject-prefix-conventional
     checkers:
       - type: subject_prefix
         require_prefix: true
         conventional: true
-        whitelist: [["feat"], ["fix"], ["chore"], ["docs"], ["style"],
-                    ["refactor"], ["test"], ["ci"]]
 
-  # subject_prefix filter — apply rule only to ci: cram: commits
-  # Cram CI commits must have a sign-off trailer.
-  - name: cram-commits-need-signoff
-    filters:
+  # subject_prefix — `required`: chain must match at least one pattern (OR).
+  - name: subject-prefix-required
+    checkers:
       - type: subject_prefix
-        any_of: [["ci", "cram"]]
-    checkers:
-      - type: trailer_present
-        required: ["Signed-off-by"]
+        required: [[feat], [fix], [ci, cram]]
 
-  # commit_type (apply rule only to revert commits)
-  # Revert commits must explain why in the description.
-  - name: revert-must-explain-reason
-    filters:
-      - type: commit_type
-        types: ["revert"]
+  # subject_prefix — whitelist: only these exact chains are allowed.
+  - name: subject-prefix-whitelist
     checkers:
-      - type: description_length
-        min: 20
+      - type: subject_prefix
+        whitelist: [[feat], [fix], [chore], [docs], [ci], [test], [refactor]]
 
-  # description_length
-  # Commits that touch source code must carry a meaningful description.
-  - name: src-changes-need-description
-    filters:
-      - type: paths_modified
-        any_of: ["src/"]
+  # subject_prefix — blacklist: these chains are forbidden.
+  - name: subject-prefix-blacklist
     checkers:
-      - type: description_length
-        min: 20
-        line_max: 100
+      - type: subject_prefix
+        blacklist: [[wip], [tmp]]
 
-  # description_matches_regex
-  # Any commit touching docs must mention the affected section.
-  - name: docs-must-reference-section
-    filters:
-      - type: paths_modified
-        any_of: ["docs/"]
+  # subject_prefix — explicit mode when both lists are given.
+  - name: subject-prefix-whitelist-mode
     checkers:
-      - type: description_matches_regex
-        pattern: "(?i)section|chapter|page|readme"
-
-  # trailer_present with required
-  # Every commit must be signed off.
-  - name: require-sign-off
-    checkers:
-      - type: trailer_present
-        required: ["Signed-off-by"]
-
-  # trailer_present with at_least_one_of
-  # API changes must reference a ticket or issue.
-  - name: api-changes-need-issue-reference
-    filters:
-      - type: paths_modified
-        any_of: ["src/api/"]
-    checkers:
-      - type: trailer_present
-        at_least_one_of: [["Fixes", "Closes", "Refs"]]
-
-  # trailer_present with exactly_one_of and whitelist mode
-  # Commits must have exactly one authorship trailer and no unlisted trailers.
-  - name: enforce-authorship-trailer
-    checkers:
-      - type: trailer_present
-        exactly_one_of: [["Co-authored-by", "Reviewed-by"]]
-        whitelist: ["Signed-off-by", "Change-Id"]
-        blacklist: ["WIP"]
+      - type: subject_prefix
+        whitelist: [[feat], [fix]]
+        blacklist: [[wip]]
         mode: whitelist
 
-  # paths_modified checker with whitelist
-  # Migration commits must not touch anything outside migrations/.
-  - name: migrations-must-be-isolated
+  # ===========================================================================
+  # DESCRIPTION CHECKERS
+  # ===========================================================================
+
+  # description_length — total minimum and per-line maximum (body only).
+  - name: description-length
+    filters:
+      - type: commit_type
+        types: [regular]
+    checkers:
+      - type: description_length
+        min: 20
+        line_max: 72
+        fail_message: "Add a body of at least 20 chars, wrapped at 72 columns."
+
+  # description_matches_regex — body must match the pattern (re.search).
+  - name: description-matches-regex
     filters:
       - type: paths_modified
-        any_of: ["migrations/"]
+        any_of: [docs/]
     checkers:
-      - type: paths_modified
-        whitelist: ["migrations/"]
+      - type: description_matches_regex
+        pattern: '(?i)\b(section|chapter|page|readme)\b'
 
-  # paths_modified checker with blacklist
-  # Secrets and env files must never be committed.
-  - name: no-secrets-in-commits
+  # ===========================================================================
+  # TRAILER CHECKERS
+  # ===========================================================================
+
+  # trailer_present — `required`: every listed token present and non-empty.
+  - name: trailer-required
     checkers:
-      - type: paths_modified
-        blacklist: [".env", ".env.local", "secrets/"]
+      - type: trailer_present
+        required: [Signed-off-by]
+        fail_message: "Sign off your commit with `git commit -s`."
 
-  # paths_modified checker with required
-  # Every commit touching source must include a test change.
-  - name: src-changes-must-include-tests
+  # trailer_present — `at_least_one_of`: each group needs ≥1 token present.
+  - name: trailer-at-least-one-of
+    checkers:
+      - type: trailer_present
+        at_least_one_of:
+          - [Closes, Fixes, References]
+
+  # trailer_present — `exactly_one_of`: each group needs exactly one token.
+  - name: trailer-exactly-one-of
+    checkers:
+      - type: trailer_present
+        exactly_one_of:
+          - [Reviewed-by, Acked-by]
+
+  # trailer_present — whitelist mode: only the listed trailers are permitted.
+  - name: trailer-whitelist-mode
+    checkers:
+      - type: trailer_present
+        required: [Signed-off-by]
+        whitelist: [Reviewed-by, Co-authored-by]
+        mode: whitelist
+
+  # trailer_present — blacklist: these trailers must not appear.
+  - name: trailer-blacklist
+    checkers:
+      - type: trailer_present
+        blacklist: [WIP, Skip-CI]
+
+  # trailer_value — whitelist: present values must match a literal or regexp.
+  - name: trailer-value-whitelist
+    checkers:
+      - type: trailer_value
+        trailers: [Fixes, Closes]
+        mode: whitelist
+        literals: ["#none"]
+        regexps: ['^[A-Z]+-\d+$']
+
+  # trailer_value — blacklist: no listed trailer may hold a matching value.
+  - name: trailer-value-blacklist
+    checkers:
+      - type: trailer_value
+        trailers: [Signed-off-by]
+        mode: blacklist
+        regexps: ['(?i)bot@']
+        fail_message: "Don't sign off with a bot account."
+
+  # dco_email_domain_whitelist — sign-off emails must be from allowed domains.
+  - name: dco-email-domains
+    checkers:
+      - type: dco_email_domain_whitelist
+        domains: [example.com, corp.org]
+
+  # dco_email_domain_whitelist — override which trailers to inspect.
+  - name: dco-email-domains-custom-trailers
+    checkers:
+      - type: dco_email_domain_whitelist
+        trailers: [Signed-off-by, Co-authored-by]
+        domains: [example.com]
+
+  # trailer_can_merge — each listed trailer may appear at most once.
+  - name: trailer-can-merge
+    checkers:
+      - type: trailer_can_merge
+        trailers: [Reviewed-by, Approved-by]
+
+  # ===========================================================================
+  # FILE CHECKERS
+  # ===========================================================================
+
+  # paths_modified — `required`: these paths must be among the changes.
+  - name: paths-required
     filters:
       - type: paths_modified
-        any_of: ["src/"]
+        any_of: [src/]
     checkers:
       - type: paths_modified
-        required: ["tests/"]
+        required: [tests/]
+        fail_message: "Changes under src/ must come with a test change."
+
+  # paths_modified — whitelist: commit may only touch these paths.
+  - name: paths-whitelist
+    filters:
+      - type: paths_modified
+        any_of: [migrations/]
+    checkers:
+      - type: paths_modified
+        whitelist: [migrations/]
+
+  # paths_modified — blacklist: these paths must never be committed.
+  - name: paths-blacklist
+    checkers:
+      - type: paths_modified
+        blacklist: [.env, .env.local, secrets/]
+
+  # paths_modified — explicit mode when both lists are given.
+  - name: paths-whitelist-mode
+    checkers:
+      - type: paths_modified
+        whitelist: [src/, tests/]
+        blacklist: [src/generated/]
+        mode: whitelist
+
+  # isolate_changes — a commit touching one group must stay within that group.
+  - name: isolate-changes
+    checkers:
+      - type: isolate_changes
+        groups:
+          - [frontend/, package.json, package-lock.json]
+          - [backend/, requirements.txt]
+          - [db/migrations/]
