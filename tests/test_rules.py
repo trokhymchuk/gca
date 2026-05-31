@@ -95,6 +95,25 @@ class TestRule:
         assert result is not None
         assert len(result.failures) == 2
 
+    def test_fail_message_appended_to_failure(self):
+        checker = SubjectMatchesRegexChecker(pattern=r"^feat: ")
+        checker.fail_message = "Use a conventional-commits prefix."
+        rule = Rule(name="conventional", checkers=[checker])
+        commit = make_commit(subject="added thing")
+        result = rule.check(commit)
+        assert result is not None
+        _, message = result.failures[0]
+        assert "Use a conventional-commits prefix." in message
+
+    def test_fail_message_absent_leaves_message_unchanged(self):
+        checker = SubjectMatchesRegexChecker(pattern=r"^feat: ")
+        rule = Rule(name="conventional", checkers=[checker])
+        commit = make_commit(subject="added thing")
+        result = rule.check(commit)
+        assert result is not None
+        _, message = result.failures[0]
+        assert "\n" not in message
+
     def test_no_filters_applies_to_all_commits(self):
         rule = Rule(name="all", checkers=[SubjectLengthChecker(max=72)])
         commit = make_commit(changed_files=[])
@@ -189,6 +208,24 @@ rules:
         assert rule.name == "conventional-commits"
         assert len(rule.filters) == 0
         assert len(rule.checkers) == 2
+
+    def test_loads_checker_fail_message(self, tmp_path: Path):
+        yaml_file = tmp_path / "rules.yml"
+        yaml_file.write_text("""
+rules:
+  - name: conventional-commits
+    checkers:
+      - type: subject_matches_regex
+        pattern: "^(feat|fix): .+"
+        fail_message: "See the contribution guidelines."
+      - type: subject_length
+        max: 72
+""")
+        rf = load_config(yaml_file)
+        checkers = rf.ruleset.rules[0].checkers
+        assert checkers[0].fail_message == "See the contribution guidelines."
+        # fail_message is optional; absent stays None and is not a ctor arg.
+        assert checkers[1].fail_message is None
 
     def test_loads_rule_with_filter_and_checker(self, tmp_path: Path):
         yaml_file = tmp_path / "rules.yml"

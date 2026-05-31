@@ -41,15 +41,18 @@ class TrailerValueChecker(CommitChecker):
     found by any pattern in ``regexps`` (via ``re.search``).  Every trailer
     listed in ``trailers`` is checked independently; all must pass.
 
-    In ``whitelist`` mode each trailer must be present with at least one
-    matching value.  In ``blacklist`` mode no value of any listed trailer
-    may match.
+    Both modes pass when a listed trailer is absent — they constrain values,
+    not presence.  In ``whitelist`` mode the listed literals/regexps are the
+    *only* values allowed: a present trailer fails if none of its values
+    match.  In ``blacklist`` mode the listed literals/regexps are forbidden:
+    a present trailer fails if any of its values match.
 
     Attributes:
         trailers: Trailer tokens to inspect.  Token matching is
             case-insensitive, following ``git interpret-trailers`` conventions.
-        mode: ``"whitelist"`` — each trailer must have a matching value.
-            ``"blacklist"`` — no trailer may have a matching value.
+        mode: ``"whitelist"`` — when present, every value must match an allowed
+            literal/regexp.  ``"blacklist"`` — no value may match a forbidden
+            literal/regexp.  Both pass when the trailer is absent.
         literals: Exact string values to compare against (case-sensitive).
         regexps: Regular expression patterns evaluated with ``re.search``
             against each trailer value.
@@ -79,7 +82,7 @@ class TrailerValueChecker(CommitChecker):
 
         if self.mode == "whitelist":
             if not values:
-                return f"Trailer '{token}' is absent; expected a matching value"
+                return None
             matching = [v for v in values if self._value_matches(v)]
             if not matching:
                 return (

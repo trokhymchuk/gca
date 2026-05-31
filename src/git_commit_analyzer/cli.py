@@ -279,7 +279,11 @@ def _run_config(
         )
         for checker_name, message in result.failures:
             label = click.style(f"  {checker_name + ': ':<10}", dim=True)
-            click.echo(label + message, color=color)
+            # Indent any continuation lines (e.g. an appended fail_message) so
+            # they line up under the message rather than at column 0.
+            first, *rest = message.split("\n")
+            indented = "\n".join([first, *(f"  {'':<10}{line}" for line in rest)])
+            click.echo(label + indented, color=color)
         click.echo()
 
     if failure_count:

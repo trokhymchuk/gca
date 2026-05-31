@@ -208,6 +208,15 @@ filters:
 
 Checkers define what must be true about a commit that passed its filters. Add `invert: true` to negate any checker.
 
+Any checker also accepts an optional `fail_message:` — a custom line appended to that checker's output when it fails, to give the author extra guidance. It has no effect when the checker passes.
+
+```yaml
+checkers:
+  - type: subject_length
+    max: 62
+    fail_message: "Keep the subject under 62 chars (incl. the component prefix)."
+```
+
 ### Subject
 
 #### `subject_length`
@@ -369,8 +378,10 @@ Validates the values of one or more git trailers. Every listed trailer is checke
 
 At least one of `literals` or `regexps` must be provided.
 
-- `whitelist` mode: fails for any trailer that is absent or has no matching value.
-- `blacklist` mode: fails for any trailer that has a matching value; passes when a trailer is absent.
+Both modes constrain values, not presence — a trailer that is **absent always passes**.
+
+- `whitelist` mode: the listed `literals`/`regexps` are the only values allowed. Fails for a *present* trailer whose values don't include a match.
+- `blacklist` mode: the listed `literals`/`regexps` are forbidden. Fails for a *present* trailer that has a matching value.
 
 ```yaml
 # Both Fixes and Closes must reference a JIRA ticket

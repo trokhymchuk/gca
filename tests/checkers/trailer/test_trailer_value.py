@@ -21,13 +21,12 @@ class TestTrailerValueCheckerWhitelist:
         assert result.passed is False
         assert "pending" in result.message
 
-    def test_fails_when_trailer_absent(self, make_commit: MakeCommit) -> None:
+    def test_passes_when_trailer_absent(self, make_commit: MakeCommit) -> None:
         commit = make_commit()
         result = TrailerValueChecker(
             trailers=["Status"], mode="whitelist", literals=["approved"]
         )(commit)
-        assert result.passed is False
-        assert "absent" in result.message
+        assert result.passed is True
 
     def test_passes_when_regexp_matches(self, make_commit: MakeCommit) -> None:
         commit = make_commit(trailers=[Trailer("Fixes", "JIRA-123")])
@@ -85,12 +84,23 @@ class TestTrailerValueCheckerWhitelist:
         assert result.passed is True
 
     def test_all_trailers_must_pass(self, make_commit: MakeCommit) -> None:
-        commit = make_commit(trailers=[Trailer("Fixes", "JIRA-1")])
+        commit = make_commit(
+            trailers=[Trailer("Fixes", "JIRA-1"), Trailer("Closes", "nope")]
+        )
         result = TrailerValueChecker(
             trailers=["Fixes", "Closes"], mode="whitelist", regexps=[r"^JIRA-\d+$"]
         )(commit)
         assert result.passed is False
         assert "Closes" in result.message
+
+    def test_passes_when_listed_trailer_absent_and_present_matches(
+        self, make_commit: MakeCommit
+    ) -> None:
+        commit = make_commit(trailers=[Trailer("Fixes", "JIRA-1")])
+        result = TrailerValueChecker(
+            trailers=["Fixes", "Closes"], mode="whitelist", regexps=[r"^JIRA-\d+$"]
+        )(commit)
+        assert result.passed is True
 
     def test_passes_when_all_trailers_match(self, make_commit: MakeCommit) -> None:
         commit = make_commit(
@@ -104,7 +114,9 @@ class TestTrailerValueCheckerWhitelist:
     def test_error_message_lists_all_failing_trailers(
         self, make_commit: MakeCommit
     ) -> None:
-        commit = make_commit()
+        commit = make_commit(
+            trailers=[Trailer("Fixes", "nope"), Trailer("Closes", "nope")]
+        )
         result = TrailerValueChecker(
             trailers=["Fixes", "Closes"], mode="whitelist", literals=["JIRA-1"]
         )(commit)

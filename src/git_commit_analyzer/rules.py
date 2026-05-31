@@ -112,11 +112,15 @@ class Rule:
         """
         if not all(f(commit) for f in self.filters):
             return None
-        failures = [
-            (checker.name, result.message)
-            for checker in self.checkers
-            if not (result := checker(commit)).passed
-        ]
+        failures: list[tuple[str, str]] = []
+        for checker in self.checkers:
+            result = checker(commit)
+            if result.passed:
+                continue
+            message = result.message
+            if checker.fail_message:
+                message = f"{message}\n{checker.fail_message}"
+            failures.append((checker.name, message))
         return CommitRuleResult(commit=commit, rule_name=self.name, failures=failures)
 
 
@@ -227,6 +231,7 @@ def _build_checker(
     """
     spec = dict(spec)
     invert = spec.pop("invert", False)
+    fail_message = spec.pop("fail_message", None)
     type_name = spec.pop("type")
     cls = CommitChecker._registry.get(type_name)
     if cls is None:
@@ -240,7 +245,9 @@ def _build_checker(
         checker = cls(config=llm_config, debug=debug, **spec)
     else:
         checker = cls(**spec)
-    return NegatedChecker(checker=checker) if invert else checker
+    result = NegatedChecker(checker=checker) if invert else checker
+    result.fail_message = fail_message
+    return result
 
 
 def _build_config(config_data: dict) -> AppConfig:

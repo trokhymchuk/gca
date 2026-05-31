@@ -49,11 +49,17 @@ class CommitChecker(ABC):
         name: Unique string identifier used in YAML rulesets (``type:`` field).
             Must be set on every concrete subclass; duplicates raise
             :exc:`TypeError` at class-definition time.
+        fail_message: Optional custom message appended to the checker's failure
+            output, providing extra guidance to the user. Set from the optional
+            ``fail_message:`` key in a checker's YAML spec; ``None`` when absent.
+            Declared here (not as a dataclass field) so every checker inherits
+            it without affecting subclass constructors.
         _registry: Class-level mapping of ``name → class``, populated
             automatically via :meth:`__init_subclass__`.
     """
 
     name: str
+    fail_message: str | None = None
     _registry: dict[str, type] = {}
 
     def __init_subclass__(cls, **kwargs: object) -> None:
