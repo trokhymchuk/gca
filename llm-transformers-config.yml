@@ -1,7 +1,7 @@
 config:
   llm:
     backend: transformers
-    model_path: /opt/output_classifier_production
+    model_path: /home/atrokhymchuk/dev/commit-model/output_classifier_production
     device: cpu
     prompt: "{commit}"
     threshold: 0.5
