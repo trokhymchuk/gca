@@ -1,5 +1,6 @@
 from .config import AppConfig, LlmConfig
 from .rules import (
+    CheckOutcome,
     CommitRuleResult,
     Rule,
     Ruleset,
@@ -63,6 +64,7 @@ __all__ = [
     "Rule",
     "Ruleset",
     "ConfigFile",
+    "CheckOutcome",
     "CommitRuleResult",
     "load_config",
     "load_configs",

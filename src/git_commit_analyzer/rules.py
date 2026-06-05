@@ -58,25 +58,50 @@ class ConfigFile:
 
 
 @dataclass
+class CheckOutcome:
+    """The outcome of running a single checker against a single commit.
+
+    Attributes:
+        checker_name: Name of the checker (its ``name`` attribute).
+        passed: ``True`` when the commit satisfied the checker.
+        message: Human-readable description of the outcome. For failures this
+            already includes any configured ``fail_message`` appended on a new
+            line.
+    """
+
+    checker_name: str
+    passed: bool
+    message: str
+
+
+@dataclass
 class CommitRuleResult:
     """The outcome of running a single :class:`Rule` against a single commit.
 
     Attributes:
         commit: The commit that was evaluated.
         rule_name: Name of the rule that produced this result.
-        failures: Ordered list of ``(checker_name, message)`` pairs for every
-            checker that did not pass.  Empty when the commit satisfies all
-            checkers.
+        checks: Ordered list of :class:`CheckOutcome` objects, one per checker
+            in the rule, both passing and failing.
     """
 
     commit: GitCommit
     rule_name: str
-    failures: list[tuple[str, str]]
+    checks: list[CheckOutcome]
+
+    @property
+    def failures(self) -> list[tuple[str, str]]:
+        """``(checker_name, message)`` pairs for every checker that did not pass.
+
+        Empty when the commit satisfies all checkers. Retained for backward
+        compatibility (JSON output and tests).
+        """
+        return [(c.checker_name, c.message) for c in self.checks if not c.passed]
 
     @property
     def passed(self) -> bool:
         """``True`` when no checker failures were recorded."""
-        return not self.failures
+        return all(c.passed for c in self.checks)
 
 
 @dataclass
@@ -112,16 +137,20 @@ class Rule:
         """
         if not all(f(commit) for f in self.filters):
             return None
-        failures: list[tuple[str, str]] = []
+        checks: list[CheckOutcome] = []
         for checker in self.checkers:
             result = checker(commit)
-            if result.passed:
-                continue
             message = result.message
-            if checker.fail_message:
+            if not result.passed and checker.fail_message:
                 message = f"{message}\n{checker.fail_message}"
-            failures.append((checker.name, message))
-        return CommitRuleResult(commit=commit, rule_name=self.name, failures=failures)
+            checks.append(
+                CheckOutcome(
+                    checker_name=checker.name,
+                    passed=result.passed,
+                    message=message,
+                )
+            )
+        return CommitRuleResult(commit=commit, rule_name=self.name, checks=checks)
 
 
 @dataclass
@@ -165,6 +194,32 @@ class Ruleset:
                 result = rule.check(commit)
                 if result is not None and not result.passed:
                     yield result
+
+    def iter_commit_results(
+        self, commits: list[GitCommit]
+    ) -> Iterator[tuple[GitCommit, list[CommitRuleResult]]]:
+        """Yield ``(commit, results)`` for every commit, including passing ones.
+
+        Unlike :meth:`iter_check_commits`, this keeps results for rules that
+        passed as well as those that failed, and groups them by commit so a
+        renderer can show what was analyzed for each commit. Rules whose filters
+        excluded the commit (``rule.check`` returned ``None``) are omitted, so a
+        commit with no applicable rules yields an empty list.
+
+        Args:
+            commits: List of commits to evaluate.
+
+        Yields:
+            One ``(commit, results)`` tuple per commit, in commit order. Each
+            ``results`` list is in rule order.
+        """
+        for commit in commits:
+            results = [
+                result
+                for rule in self.rules
+                if (result := rule.check(commit)) is not None
+            ]
+            yield commit, results
 
 
 def _build_filter(spec: dict) -> CommitFilter:

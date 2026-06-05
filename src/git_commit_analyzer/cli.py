@@ -4,12 +4,30 @@ import sys
 from pathlib import Path
 
 import click
+from rich.console import Console
+from rich.padding import Padding
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
 
 from .config import AppConfig
 from .download import download_model
 from .models import GitCommit
 from .parser import get_commits
 from .rules import CommitRuleResult, Ruleset, load_configs
+
+
+def _make_console(color: bool | None) -> Console:
+    """Build a :class:`rich.console.Console` honoring the CLI color preference.
+
+    ``color`` is ``True`` to force ANSI on (e.g. in CI via FORCE_COLOR),
+    ``False`` to force it off, or ``None`` to let rich auto-detect.
+    """
+    if color is True:
+        return Console(force_terminal=True)
+    if color is False:
+        return Console(no_color=True)
+    return Console()
 
 
 def _serialize_commit(commit: GitCommit) -> dict:
@@ -247,6 +265,108 @@ def download_model_cmd(
     click.echo(f"Saved to: {path}")
 
 
+def _commit_panel(commit: GitCommit) -> Panel:
+    """Build a bordered panel showing the commit data that checkers see."""
+    grid = Table.grid(padding=(0, 1))
+    grid.add_column(justify="right", style="cyan", no_wrap=True)
+    grid.add_column(overflow="fold")
+
+    grid.add_row("subject", Text(commit.subject, style="bold"))
+    if commit.description:
+        grid.add_row("description", commit.description)
+    grid.add_row(
+        "files",
+        "\n".join(commit.changed_files)
+        if commit.changed_files
+        else "[dim](none)[/dim]",
+    )
+    if commit.trailers:
+        grid.add_row("trailers", "\n".join(str(t) for t in commit.trailers))
+
+    flags = []
+    if commit.is_fixup:
+        flags.append("fixup")
+    if commit.is_squash:
+        flags.append("squash")
+    if commit.is_amend:
+        flags.append("amend")
+    if commit.is_merge:
+        flags.append("merge")
+    if commit.is_revert:
+        flags.append("revert")
+    if flags:
+        grid.add_row("flags", Text(", ".join(flags), style="magenta"))
+
+    grid.add_row("author", f"{commit.author_name} <{commit.author_email}>")
+
+    return Panel(grid, title="commit", title_align="left", border_style="blue")
+
+
+def _check_line(console: Console, name: str, status: Text, dot_style: str) -> Text:
+    """Build a ``  name ........ status`` line with a dotted leader.
+
+    The leader fills the console width so the status column lines up regardless
+    of how long each checker name is, and is colored (``dot_style``) to match
+    the pass/fail status.
+    """
+    indent = 2
+    # 2 = the single space on each side of the dot leader.
+    dots = max(3, console.width - indent - len(name) - status.cell_len - 2)
+    line = Text(" " * indent)
+    line.append(name, style="bold")
+    line.append(" ")
+    line.append("." * dots, style=dot_style)
+    line.append(" ")
+    line.append_text(status)
+    return line
+
+
+def _render_commit(
+    console: Console, commit: GitCommit, results: list[CommitRuleResult]
+) -> int:
+    """Render the analysis block for one commit. Returns its failing-rule count."""
+    console.rule(style="dim")
+    console.print(
+        Text.assemble(
+            ("Analyzing: ", "bold"),
+            (commit.short_sha, "bold yellow"),
+            ("  ", ""),
+            (commit.subject, "bold"),
+        )
+    )
+    console.print(_commit_panel(commit))
+    console.print()
+
+    failing = 0
+    if not results:
+        console.print("  [dim](no rules apply to this commit)[/dim]")
+    for result in results:
+        if not result.passed:
+            failing += 1
+        console.print(Text.assemble(("rule: ", "dim"), (result.rule_name, "cyan")))
+        for check in result.checks:
+            if check.passed:
+                status = Text("✓ PASS", style="green")
+                dot_style = "green dim"
+            else:
+                status = Text("✗ FAIL", style="bold red")
+                dot_style = "red dim"
+            console.print(_check_line(console, check.checker_name, status, dot_style))
+            if not check.passed:
+                # Pad the whole message block so wrapped continuation lines stay
+                # indented under the first line rather than falling back to col 0.
+                console.print(Padding(Text(check.message, style="red"), (0, 0, 0, 6)))
+        console.print()
+
+    commit_passed = all(r.passed for r in results)
+    if commit_passed:
+        console.rule("PASSED", style="green", characters="=")
+    else:
+        console.rule("FAILED", style="bold red", characters="=")
+    console.print()
+    return failing
+
+
 def _run_config(
     commits: list[GitCommit],
     ruleset: Ruleset,
@@ -266,35 +386,22 @@ def _run_config(
             sys.exit(config.exit_code_on_failure)
         return
 
+    console = _make_console(color)
+
     failure_count = 0
-    for result in ruleset.iter_check_commits(commits):
-        failure_count += 1
-        sha = click.style(result.commit.short_sha, fg="yellow")
-        subject = click.style(result.commit.subject, bold=True)
-        click.echo(
-            click.style("✗ ", fg="red", bold=True) + f"{sha}  {subject}", color=color
-        )
-        click.echo(
-            f"  {'rule:':<10}" + click.style(result.rule_name, fg="cyan"), color=color
-        )
-        for checker_name, message in result.failures:
-            label = click.style(f"  {checker_name + ': ':<10}", dim=True)
-            # Indent any continuation lines (e.g. an appended fail_message) so
-            # they line up under the message rather than at column 0.
-            first, *rest = message.split("\n")
-            indented = "\n".join([first, *(f"  {'':<10}{line}" for line in rest)])
-            click.echo(label + indented, color=color)
-        click.echo()
+    for commit, results in ruleset.iter_commit_results(commits):
+        failure_count += _render_commit(console, commit, results)
 
     if failure_count:
-        summary = click.style(f"{failure_count} failure(s)", fg="red", bold=True)
-        click.echo(f"{summary} across {total} commit(s).", color=color)
+        console.print(
+            Text.assemble(
+                (f"{failure_count} failure(s)", "bold red"),
+                (f" across {total} commit(s).", ""),
+            )
+        )
         sys.exit(config.exit_code_on_failure)
     else:
-        click.echo(
-            click.style(f"✓ All {total} commit(s) passed.", fg="green", bold=True),
-            color=color,
-        )
+        console.print(Text(f"✓ All {total} commit(s) passed.", style="bold green"))
 
 
 def _serialize_rule_result(result: CommitRuleResult) -> dict:
