@@ -9,6 +9,14 @@ Select which config to test against with the GCA_LLM_CONFIG env var:
     GCA_LLM_CONFIG=llm-transformers-config.yml pytest tests/test_llm_integration.py -v
     GCA_LLM_CONFIG=llm-config.yml             pytest tests/test_llm_integration.py -v
 
+For an HTTP API backend (openai/anthropic/deepseek/gemini), point at its config
+and export the matching API key, e.g. for Gemini:
+
+    export GEMINI_API_KEY=...
+    GCA_LLM_CONFIG=llm-api-config.yml pytest tests/test_llm_integration.py -v -m integration
+
+API-backend tests are skipped automatically when no API key can be resolved.
+
 Defaults to llm-config.yml when the variable is not set.
 
 The model is loaded once per session so all commits share one load cost.
@@ -41,14 +49,14 @@ _COMMITS_DIR = Path(__file__).parent / "commits"
 # ---------------------------------------------------------------------------
 
 _backend = "llama-cpp"  # default; updated below after reading config
+_llm_cfg: dict = {}
 if _CONFIG_PATH.exists():
     try:
         import yaml
 
         _raw = yaml.safe_load(_CONFIG_PATH.read_text())
-        _backend = (
-            (_raw or {}).get("config", {}).get("llm", {}).get("backend", "llama-cpp")
-        )
+        _llm_cfg = (_raw or {}).get("config", {}).get("llm", {}) or {}
+        _backend = _llm_cfg.get("backend", "llama-cpp")
     except Exception:
         pass
 
@@ -68,8 +76,26 @@ try:
 except ImportError:
     pass
 
-_backend_available = (_backend == "llama-cpp" and _LLAMA_AVAILABLE) or (
-    _backend == "transformers" and _TRANSFORMERS_AVAILABLE
+# HTTP API backends need no library — they need a resolvable API key instead.
+_API_KEY_ENV = {
+    "openai": "OPENAI_API_KEY",
+    "deepseek": "DEEPSEEK_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+    "gemini": "GEMINI_API_KEY",
+}
+
+
+def _api_key_available() -> bool:
+    if _llm_cfg.get("api_key"):
+        return True
+    env_name = _llm_cfg.get("api_key_env") or _API_KEY_ENV.get(_backend, "")
+    return bool(env_name and os.environ.get(env_name))
+
+
+_backend_available = (
+    (_backend == "llama-cpp" and _LLAMA_AVAILABLE)
+    or (_backend == "transformers" and _TRANSFORMERS_AVAILABLE)
+    or (_backend in _API_KEY_ENV and _api_key_available())
 )
 
 pytestmark = [
@@ -77,7 +103,10 @@ pytestmark = [
     pytest.mark.skipif(not _CONFIG_PATH.exists(), reason=f"{_CONFIG_NAME} not found"),
     pytest.mark.skipif(
         not _backend_available,
-        reason=f"backend '{_backend}' dependencies not installed",
+        reason=(
+            f"backend '{_backend}' unavailable "
+            "(dependencies not installed or API key not set)"
+        ),
     ),
 ]
 

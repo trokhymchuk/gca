@@ -1,0 +1,65 @@
+# Ruleset config for an HTTP API LLM backend (openai / anthropic / deepseek / gemini).
+#
+# These backends call a hosted chat API over plain HTTP — no extra dependency
+# is required (no gca[llm-...] extra). They need a `model` and an API token.
+#
+# The token is resolved in this order:
+#   1. `api_key` below (a literal token — avoid committing secrets)
+#   2. the env var named by `api_key_env`
+#   3. the provider's default env var:
+#        openai    -> OPENAI_API_KEY
+#        anthropic -> ANTHROPIC_API_KEY
+#        deepseek  -> DEEPSEEK_API_KEY
+#        gemini    -> GEMINI_API_KEY
+#
+# Example:
+#   export GEMINI_API_KEY="..."
+#   gca --base-ref main --config llm-api-config.yml
+
+config:
+  llm:
+    # Pick one provider.
+    backend: gemini             # openai | anthropic | deepseek | gemini
+    model: gemini-3.1-flash-lite  # gpt-4o-mini | claude-3-5-sonnet-latest | deepseek-chat | ...
+
+    # --- API token (prefer the environment over a literal value) ---
+    # api_key: "..."            # literal token (not recommended)
+    # api_key_env: MY_TOKEN     # read the token from this env var instead of the default
+
+    # --- optional ---
+    # base_url: https://...     # override the provider endpoint (gateways / self-hosted)
+    # request_timeout: 60       # HTTP timeout in seconds
+    temperature: 0              # 0 = deterministic verdicts (recommended for PASS/FAIL)
+    max_tokens: 1024
+
+    prompt: |
+      You are a senior software engineer reviewing git commit messages.
+      Judge the commit below on its own merits. Respond with PASS or FAIL as the
+      very first word, followed by a one-sentence reason. If it fails, append a
+      suggested better commit message.
+
+      A commit PASSES when ALL of these are true:
+        - It starts with a conventional-commit prefix of the form `type:` or
+          `type(scope):` (e.g. feat:, fix(api):, ci:, auth:, parser:). Any short
+          lowercase type is acceptable — do NOT restrict to a fixed list.
+        - The subject is specific and describes what actually changed
+          (not vague filler like "fix stuff", "update", "changes", "WIP").
+        - The subject has at least ~10 meaningful characters.
+        - If a description is present, it adds context (the why or the how);
+          a missing description is acceptable when the subject is self-explanatory.
+
+      A commit FAILS only when it clearly violates one of the rules above.
+      When in doubt about a well-written, specific message, prefer PASS.
+
+      Commit:
+      {commit}
+
+rules:
+  - name: llm-commit-review
+    filters:
+      - type: commit_type
+        types: ["regular"]
+    checkers:
+      - type: llm
+        include_subject: true
+        include_description: true

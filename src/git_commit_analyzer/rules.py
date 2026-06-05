@@ -276,6 +276,12 @@ def _build_config(config_data: dict) -> AppConfig:
             device=llm_data.get("device", "cpu"),
             threshold=llm_data.get("threshold", 0.5),
             fail_message=llm_data.get("fail_message", ""),
+            model=llm_data.get("model"),
+            api_key=llm_data.get("api_key"),
+            api_key_env=llm_data.get("api_key_env"),
+            base_url=llm_data.get("base_url"),
+            request_timeout=llm_data.get("request_timeout", 60),
+            temperature=llm_data.get("temperature"),
         )
     return AppConfig(
         exit_code_on_failure=config_data.get("exit_code_on_failure", 1),

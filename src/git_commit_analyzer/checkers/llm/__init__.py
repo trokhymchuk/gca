@@ -24,9 +24,25 @@ def _load_backend(config: LlmConfig) -> LlmBackend:
         from ._transformers import TransformersBackend
 
         return TransformersBackend(config)
+    if config.backend == "openai":
+        from ._openai import OpenAiBackend
+
+        return OpenAiBackend(config)
+    if config.backend == "deepseek":
+        from ._openai import DeepSeekBackend
+
+        return DeepSeekBackend(config)
+    if config.backend == "anthropic":
+        from ._anthropic import AnthropicBackend
+
+        return AnthropicBackend(config)
+    if config.backend == "gemini":
+        from ._gemini import GeminiBackend
+
+        return GeminiBackend(config)
     raise ValueError(
-        f"Unknown LLM backend: {config.backend!r}. "
-        "Supported backends: 'llama-cpp', 'transformers'"
+        f"Unknown LLM backend: {config.backend!r}. Supported backends: "
+        "'llama-cpp', 'transformers', 'openai', 'anthropic', 'deepseek', 'gemini'"
     )
 
 
@@ -73,6 +89,14 @@ class LlmChecker(CommitChecker):
       (install ``gca[llm-llama-cpp]``).
     * ``"transformers"`` — HuggingFace models via ``transformers`` + ``torch``
       (install ``gca[llm-transformers]``).
+    * ``"openai"`` / ``"deepseek"`` — hosted OpenAI-compatible chat APIs.
+    * ``"anthropic"`` — the hosted Anthropic Messages API.
+    * ``"gemini"`` — the hosted Google Gemini (Generative Language) API.
+
+    The HTTP API backends (``openai``, ``deepseek``, ``anthropic``, ``gemini``)
+    require ``config.llm.model`` and an API token (``config.llm.api_key``,
+    ``config.llm.api_key_env`` or the provider's default environment variable);
+    they have no extra dependencies.
 
     Attributes:
         config: LLM connection and generation settings.
@@ -127,7 +151,7 @@ class LlmChecker(CommitChecker):
         if self.debug:
             print(
                 f"[debug] llm_checker backend={self.config.backend!r} "
-                f"model={self.config.repo_id or self.config.model_path!r}",
+                f"model={self.config.model or self.config.repo_id or self.config.model_path!r}",
                 file=sys.stderr,
             )
             print(f"[debug] llm_checker prompt:\n{prompt}", file=sys.stderr)

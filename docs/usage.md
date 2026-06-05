@@ -106,7 +106,7 @@ Required when using the `llm` checker.
 ```yaml
 config:
   llm:
-    backend: llama-cpp          # or: transformers
+    backend: llama-cpp          # llama-cpp | transformers | openai | anthropic | deepseek | gemini
 
     # llama-cpp: download from Hugging Face on first use
     repo_id: "owner/repo-name"
@@ -125,6 +125,37 @@ config:
     stop: ["<|im_end|>"]
     verbose: false
 ```
+
+#### HTTP API backends (openai, anthropic, deepseek, gemini)
+
+These call a hosted chat API over plain HTTP — no extra dependency is needed.
+They require `model` and an API token. The token is resolved in this order:
+`api_key` from the config → the env var named by `api_key_env` → the provider's
+default env var (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`,
+`GEMINI_API_KEY`). Prefer the environment so the secret stays out of the file.
+
+```yaml
+config:
+  llm:
+    backend: gemini             # openai | anthropic | deepseek | gemini
+    model: gemini-2.0-flash     # provider model name
+    # api_key: "sk-..."         # literal token (avoid; prefer env)
+    # api_key_env: MY_TOKEN     # read token from this env var instead of the default
+    # base_url: https://...     # override the provider endpoint (gateways, self-host)
+    # request_timeout: 60       # HTTP timeout in seconds
+    max_tokens: 256
+    prompt: |
+      Review the git commit below. Reply with PASS or FAIL as the first word,
+      followed by a one-sentence reason.
+      Commit: {commit}
+```
+
+| Backend | Default model env | Default base URL |
+| --- | --- | --- |
+| `openai` | `OPENAI_API_KEY` | `https://api.openai.com/v1` |
+| `deepseek` | `DEEPSEEK_API_KEY` | `https://api.deepseek.com/v1` |
+| `anthropic` | `ANTHROPIC_API_KEY` | `https://api.anthropic.com/v1` |
+| `gemini` | `GEMINI_API_KEY` | `https://generativelanguage.googleapis.com/v1beta` |
 
 ---
 
