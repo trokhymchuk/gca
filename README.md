@@ -51,9 +51,13 @@ Exit code is `0` when all rules pass, `1` (configurable) when any rule fails.
 # Static (no LLM)
 docker run --rm -v "$(pwd):/repo" ghcr.io/trokhymchuk/gca-static /repo --base-ref main
 
-# With llama-cpp LLM
+# With llama-cpp LLM (downloads the GGUF on first run)
 docker run --rm -v "$(pwd):/repo" ghcr.io/trokhymchuk/gca-llm-llama-cpp /repo \
   --base-ref main --config /app/llm-llama-cpp-config.yml
+
+# With llama-cpp LLM, model baked into the image (runs fully offline)
+docker run --rm -v "$(pwd):/repo" ghcr.io/trokhymchuk/gca-llm-llama-cpp-heavy /repo \
+  --base-ref main --config /app/llm-llama-cpp-heavy-config.yml
 
 # With Transformers LLM
 docker run --rm -v "$(pwd):/repo" ghcr.io/trokhymchuk/gca-llm-transformers /repo \

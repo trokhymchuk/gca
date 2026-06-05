@@ -129,6 +129,25 @@ docker build --target test -t gca-llama-cpp-test -f build/Docker/llama-cpp/Docke
 docker run --rm -e HF_TOKEN=$HF_TOKEN gca-llama-cpp-test
 ```
 
+The `heavy` target downloads the concrete GGUF at build time and bakes it in at
+`/models/model.gguf`, alongside `llm-llama-cpp-heavy-config.yml` which loads it
+via `model_path` (no Hugging Face access at runtime). The model repo and
+filename glob default to the values in `llm-llama-cpp-config.yml`; override with
+`--build-arg MODEL_REPO_ID=... --build-arg MODEL_FILENAME=...`. The HF token is
+mounted as a build secret so it never lands in a published layer.
+
+```sh
+docker build \
+  --target heavy \
+  -t gca-llm-llama-cpp-heavy \
+  -f build/Docker/llama-cpp/Dockerfile \
+  --secret id=hf_token,env=HF_TOKEN \
+  .
+
+docker run --rm -v "$(pwd):/repo" gca-llm-llama-cpp-heavy /repo \
+  --base-ref main --config /app/llm-llama-cpp-heavy-config.yml
+```
+
 ### Transformers integration tests
 
 The model is baked in during build (requires `HF_TOKEN` as a build secret).
