@@ -17,29 +17,23 @@ config:
     # model_path: "/models/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf"
 
     context_window: 4096
-    verbose: false
-
-    # --- transformers options (used when backend: transformers) ---
-    # Loads an AutoModelForSequenceClassification from a local directory
-    # (e.g. a fine-tuned classifier trained with the commit-model repo).
-    # model_path: "/path/to/output_classifier"
-    # device: cpu        # cpu, cuda, mps (auto-detected if omitted)
-
-    max_tokens: 60
+    max_tokens: 1024
     stop: ["<|im_end|>"]
+    verbose: false
 
     prompt: |
       <|im_start|>system
       You are a senior software engineer reviewing git commit messages.
       Evaluate the commit below and respond with PASS or FAIL as the very first word,
-      followed by a one-sentence reason.
+      followed by a one-sentence reason. After that respond with a recomendation for
+      improvement or possible better commit message if the original message fails.
 
       PASS if ALL of the following are true:
         - Subject is specific and explains what changed
         - Description explains why the change was made
 
       FAIL if ANY of the following are true:
-        - No commit prefix (feat/fix/chore/docs/ci/cram/test/etc.)
+        - No commit prefix (feat/fix/chore/docs/ci/cram/test/ci/profiles/etc.)
         - Subject is vague (e.g. "fix stuff", "update", "changes", "WIP")
         - Less than 10 meaningful characters in the subject
       <|im_end|>
