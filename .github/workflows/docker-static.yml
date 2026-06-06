@@ -27,6 +27,10 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v5
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - uses: docker/setup-buildx-action@v4
       - uses: docker/build-push-action@v7
         with:
@@ -51,6 +55,10 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v5
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - uses: docker/setup-buildx-action@v4
       - uses: docker/build-push-action@v7
         with:
@@ -75,6 +83,10 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v5
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v4
         with:
