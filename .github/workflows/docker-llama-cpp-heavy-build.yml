@@ -2,6 +2,7 @@ name: Docker llama-cpp heavy — Build
 
 on:
   workflow_dispatch:
+  workflow_call:
 
 jobs:
   build:

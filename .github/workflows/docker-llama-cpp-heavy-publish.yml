@@ -7,7 +7,12 @@ on:
   workflow_dispatch:
 
 jobs:
+  build:
+    uses: ./.github/workflows/docker-llama-cpp-heavy-build.yml
+    secrets: inherit
+
   test:
+    needs: build
     uses: ./.github/workflows/docker-llama-cpp-heavy-test.yml
     secrets: inherit
 
