@@ -2,6 +2,7 @@ name: Docker Transformers — Test
 
 on:
   workflow_dispatch:
+  workflow_call:
   workflow_run:
     workflows: ["Docker Transformers — Build"]
     types: [completed]
@@ -9,7 +10,7 @@ on:
 jobs:
   test:
     name: Test (transformers)
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read

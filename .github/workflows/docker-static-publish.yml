@@ -1,11 +1,19 @@
 name: Docker Static — Publish
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 jobs:
+  test:
+    uses: ./.github/workflows/docker-static-test.yml
+    secrets: inherit
+
   publish:
     name: Publish (static)
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -24,6 +32,6 @@ jobs:
           file: build/Docker/static/Dockerfile
           target: final
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/gca-static:latest
+          tags: ghcr.io/${{ github.repository_owner }}/gca-static:${{ github.ref_type == 'tag' && github.ref_name || 'latest' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

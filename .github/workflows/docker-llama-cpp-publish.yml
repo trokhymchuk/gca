@@ -1,11 +1,19 @@
 name: Docker llama-cpp — Publish
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 jobs:
+  test:
+    uses: ./.github/workflows/docker-llama-cpp-test.yml
+    secrets: inherit
+
   publish:
     name: Publish (llama-cpp)
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -24,6 +32,6 @@ jobs:
           file: build/Docker/llama-cpp/Dockerfile
           target: final
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/gca-llm-llama-cpp:latest
+          tags: ghcr.io/${{ github.repository_owner }}/gca-llm-llama-cpp:${{ github.ref_type == 'tag' && github.ref_name || 'latest' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
