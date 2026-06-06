@@ -55,10 +55,6 @@ docker run --rm -v "$(pwd):/repo" ghcr.io/trokhymchuk/gca-static /repo --base-re
 docker run --rm -v "$(pwd):/repo" ghcr.io/trokhymchuk/gca-llm-llama-cpp /repo \
   --base-ref main --config /app/llm-llama-cpp-config.yml
 
-# With llama-cpp LLM, model baked into the image (runs fully offline)
-docker run --rm -v "$(pwd):/repo" ghcr.io/trokhymchuk/gca-llm-llama-cpp-heavy /repo \
-  --base-ref main --config /app/llm-llama-cpp-heavy-config.yml
-
 # With Transformers LLM
 docker run --rm -v "$(pwd):/repo" ghcr.io/trokhymchuk/gca-llm-transformers /repo \
   --base-ref main --config /app/llm-transformers-config.yml
