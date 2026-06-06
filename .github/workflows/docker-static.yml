@@ -1,0 +1,92 @@
+name: Static
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      step:
+        description: 'Step to run. "build"/"test" run on their own; "publish" runs build → test → publish.'
+        type: choice
+        default: test
+        options:
+          - build
+          - test
+          - publish
+
+jobs:
+  build:
+    name: Build (static)
+    if: >-
+      github.event_name == 'push' ||
+      inputs.step == 'build' ||
+      inputs.step == 'publish'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: build/Docker/static/Dockerfile
+          target: final
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  test:
+    name: Test (static)
+    needs: build
+    if: >-
+      !cancelled() &&
+      needs.build.result != 'failure' &&
+      ( github.event_name == 'push' ||
+        inputs.step == 'test' ||
+        inputs.step == 'publish' )
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: build/Docker/static/Dockerfile
+          target: test
+          load: true
+          tags: gca-static-test:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - run: docker run --rm gca-static-test:latest
+
+  publish:
+    name: Publish (static)
+    needs: [build, test]
+    if: >-
+      github.event_name == 'push' ||
+      inputs.step == 'publish'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: build/Docker/static/Dockerfile
+          target: final
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/gca-static:${{ github.ref_type == 'tag' && github.ref_name || 'latest' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
