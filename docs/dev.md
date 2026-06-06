@@ -131,7 +131,8 @@ docker run --rm -e HF_TOKEN=$HF_TOKEN gca-llama-cpp-test
 
 ### Transformers integration tests
 
-The model is baked in during build (requires `HF_TOKEN` as a build secret).
+The model is baked into the `test` image (requires `HF_TOKEN` as a build secret).
+The published `final` image ships without it — users supply the model themselves.
 
 ```sh
 docker build \

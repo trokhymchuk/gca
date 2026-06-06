@@ -12,8 +12,9 @@ COPY src/ src/
 RUN uv sync --frozen --no-dev --no-cache --no-editable --extra "${UV_EXTRA}"
 
 # ---- model ------------------------------------------------------------------
-# Download the private model into a separate stage to keep credentials out of
-# the final image layers. The HF token is mounted as a build secret.
+# Download the private model in a separate stage. Consumed only by the `test`
+# stage below — the published `final` image ships without the model. The HF
+# token is mounted as a build secret so it never lands in a layer.
 FROM python:3.12-slim-bookworm AS model
 
 ARG MODEL_ID=trokhymchuk/commit-quality-model
@@ -34,7 +35,6 @@ RUN apt-get update \
 RUN git config --global --add safe.directory '*'
 
 COPY --from=builder /app/.venv /app/.venv
-COPY --from=model /opt/output_classifier_production /opt/output_classifier_production
 
 WORKDIR /app
 
@@ -46,6 +46,7 @@ ENV PATH="/app/.venv/bin:$PATH"
 FROM final AS test
 
 COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv
+COPY --from=model /opt/output_classifier_production /opt/output_classifier_production
 ENV VIRTUAL_ENV=/app/.venv
 RUN uv pip install pytest
 
